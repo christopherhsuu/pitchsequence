@@ -1,0 +1,26 @@
+{
+  "categorical": [
+    "pitch_type",
+    "grid_cell",
+    "p_throws",
+    "stand"
+  ],
+  "numerical": [
+    "release_speed",
+    "pfx_x",
+    "pfx_z",
+    "release_pos_z",
+    "extension",
+    "balls",
+    "strikes",
+    "outs_when_up"
+  ],
+  "classes": [
+    "Ball",
+    "CalledStrike",
+    "Foul",
+    "InPlaySolid",
+    "InPlayWeak",
+    "SwingingStrike"
+  ]
+}
