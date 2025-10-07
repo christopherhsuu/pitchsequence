@@ -1,0 +1,13 @@
+data/raw/
+data/interim/
+data/processed/
+artifacts/
+notebooks/.ipynb_checkpoints/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env/
+.DS_Store
+.streamlit/cache/
+.streamlit/secrets.toml
