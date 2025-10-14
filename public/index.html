@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PitchSequence — Recommender</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Helvetica,Arial;max-width:900px;margin:2rem auto;padding:1rem}
+    label{display:block;margin-top:.75rem}
+    input,select{padding:.5rem;margin-top:.25rem;width:100%}
+    button{margin-top:1rem;padding:.6rem 1rem}
+    pre{background:#111;color:#eee;padding:1rem;border-radius:6px;overflow:auto}
+  </style>
+</head>
+<body>
+  <h1>PitchSequence — Recommender</h1>
+  <form id="frm">
+    <label>Batter ID or name<input id="batter" value="455117"></label>
+    <label>Pitcher ID<input id="pitcher" value="123456"></label>
+    <label>Count<input id="count" value="1-1"></label>
+    <label>RISP<select id="risp"><option value="false">No</option><option value="true" selected>Yes</option></select></label>
+    <label>Outs<select id="outs"><option>0</option><option>1</option><option selected>2</option></select></label>
+    <label>Late inning<select id="late"><option value="false">No</option><option value="true" selected>Yes</option></select></label>
+    <button type="button" id="run">Recommend</button>
+  </form>
+  <h2>Result</h2>
+  <div id="result">No recommendation yet</div>
+  <h3>Raw JSON</h3>
+  <pre id="raw">{}</pre>
+
+  <script>
+    document.getElementById('run').addEventListener('click', async () => {
+      const batter = document.getElementById('batter').value;
+      const pitcher = document.getElementById('pitcher').value;
+      const count = document.getElementById('count').value;
+      const risp = document.getElementById('risp').value === 'true';
+      const outs = parseInt(document.getElementById('outs').value, 10);
+      const late = document.getElementById('late').value === 'true';
+      const body = { batter, pitcher, count, situation: { risp, outs, late_inning: late } };
+      document.getElementById('result').textContent = 'Waiting...';
+      try {
+        const resp = await fetch('/api/recommend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await resp.json();
+        document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+        if (resp.ok) {
+          const seq = data.recommended_sequence.map(s => `${s.pitch} (${s.location})`).join(' → ');
+          document.getElementById('result').textContent = seq + ` — confidence ${data.confidence}`;
+        } else {
+          document.getElementById('result').textContent = 'Error: ' + (data.detail || JSON.stringify(data));
+        }
+      } catch (err) {
+        document.getElementById('result').textContent = 'Fetch error: ' + err;
+      }
+    });
+  </script>
+</body>
+</html>
