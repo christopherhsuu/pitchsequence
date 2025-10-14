@@ -33,12 +33,29 @@ def get_archetype(arche_df: pd.DataFrame, batter_id: Any) -> str:
     row = None
     if batter_id is None:
         return "unknown"
-    # allow passing integer id or string
-    if batter_id in arche_df["batter"].values:
-        row = arche_df[arche_df["batter"] == batter_id].iloc[0]
-    else:
-        # try as string match on any column
-        matches = arche_df[arche_df.apply(lambda r: str(batter_id).lower() in str(r.values).lower(), axis=1)]
+    # normalize input to string for comparisons
+    bstr = str(batter_id).strip()
+    # direct numeric id match (handles int or numeric string)
+    if bstr.isdigit():
+        matches = arche_df[arche_df["batter"].astype(str) == bstr]
+        if not matches.empty:
+            row = matches.iloc[0]
+    # fallback: case-insensitive substring match against any textual columns
+    if row is None:
+        lowered = bstr.lower()
+        def row_matches(r):
+            for c in r.index:
+                v = r[c]
+                if pd.isna(v):
+                    continue
+                try:
+                    if lowered in str(v).lower():
+                        return True
+                except Exception:
+                    continue
+            return False
+
+        matches = arche_df[arche_df.apply(row_matches, axis=1)]
         if not matches.empty:
             row = matches.iloc[0]
 
@@ -56,13 +73,14 @@ def get_archetype(arche_df: pd.DataFrame, batter_id: Any) -> str:
             1: "Contact Hitter",
             2: "Contact/Puller",
             3: "Patient Hitter",
-            4: "Spray/Speed" 
+            4: "Spray/Speed"
         }
         try:
             c = int(row.get("cluster"))
             return cluster_map.get(c, f"cluster_{c}")
         except Exception:
-            return "unknown"
+            # if cluster is non-numeric, just return its string
+            return str(row.get("cluster", "unknown"))
 
     # fallback: look at hard-hit/stats and derive simple label
     if "pct_hard_hit" in arche_df.columns:
@@ -224,6 +242,49 @@ def recommend_sequence(arche_df: pd.DataFrame, ars_df: pd.DataFrame,
         "strategy_notes": generate_strategy_notes(archetype, pitches, count, situation)
     }
     return result
+
+
+def get_next_pitch_candidates(arche_df: pd.DataFrame, ars_df: pd.DataFrame,
+                               batter: Any, pitcher: Any, count: str,
+                               situation: Dict[str, Any], top_n: int = None) -> List[Dict[str, Any]]:
+    """Return ranked next-pitch candidates with percentage probabilities and suggested locations.
+
+    Output: list of {pitch, pct, location, score}
+    """
+    archetype = get_archetype(arche_df, batter)
+    pitches = get_pitcher_arsenal(ars_df, pitcher)
+
+    # score function (same logic as recommend_sequence)
+    def pitch_score(pt: str) -> float:
+        pt = pt.upper()
+        score = 1.0
+        if "Power" in archetype:
+            if pt in ("SL", "CU", "KC"): score += 1.5
+        if "Contact" in archetype:
+            if pt in ("FF", "CT", "FT"): score += 0.5
+        if "Patient" in archetype:
+            if pt in ("FF", "FT"): score += 1.0
+        # situation tweaks
+        if situation.get("late_inning") and situation.get("outs", 0) >= 2:
+            if pt in ("SL", "CU"): score += 0.7
+        return score
+
+    scored = [(p, pitch_score(p)) for p in pitches]
+    # ensure deterministic sort: score desc then pitch name
+    scored = sorted(scored, key=lambda x: (-x[1], x[0]))
+
+    # optionally limit
+    if top_n:
+        scored = scored[:top_n]
+
+    total = sum(s for _, s in scored) if scored else 0.0
+    candidates = []
+    for p, s in scored:
+        pct = (s / total) if total > 0 else 1.0 / max(1, len(scored))
+        loc = map_pitch_to_location(p, archetype, situation)
+        candidates.append({"pitch": p, "pct": round(pct * 100, 1), "location": loc, "score": round(s, 3)})
+
+    return candidates
 
 
 def generate_strategy_notes(archetype: str, pitches: List[str], count: str, situation: Dict[str, Any]) -> str:
