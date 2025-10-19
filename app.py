@@ -24,7 +24,14 @@ st.title("PitchSequence — Pitch Sequence Recommender")
 try:
     import subprocess
     short_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
-    st.caption(f"commit: {short_hash}")
+    branch_name = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+    # show prominently in the sidebar and also as a small caption so it's easy to verify the deployed commit
+    try:
+        st.sidebar.markdown(f"**commit:** `{short_hash}`  \n**branch:** {branch_name}")
+        st.info(f"Running commit: {short_hash} (branch: {branch_name})")
+    except Exception:
+        # fallback to caption when sidebar/info unavailable
+        st.caption(f"commit: {short_hash}  branch: {branch_name}")
 except Exception:
     # ignore if git not available in the runtime
     pass
