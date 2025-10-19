@@ -26,7 +26,12 @@ try:
     short_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
     model_path = os.path.exists("artifacts/runvalue_model.pkl")
     ars_path = os.path.exists("pitcher_assets/pitcher_arsenals.csv")
-    st.markdown(f"<div style='background:#fff3bf;padding:10px;border-radius:6px;margin-bottom:12px'><strong>Deployment</strong>: commit <code>{short_hash}</code> — model artifact present: <strong>{model_path}</strong> — pitcher_arsenals present: <strong>{ars_path}</strong></div>", unsafe_allow_html=True)
+    # Deployment info is shown in the sidebar for less intrusive UI; remove top banner
+    try:
+        st.sidebar.markdown(f"**Deployment**: commit `{short_hash}` — model: {model_path} — arsenals: {ars_path}")
+    except Exception:
+        # fallback to subtle caption if sidebar isn't available
+        st.caption(f"commit: {short_hash}  model: {model_path}  arsenals: {ars_path}")
 except Exception:
     # best-effort only — don't fail the app for banner rendering
     pass
