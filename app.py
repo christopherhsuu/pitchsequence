@@ -20,6 +20,17 @@ except Exception as e:
 st.set_page_config(page_title="PitchSequence", layout="centered")
 st.title("PitchSequence — Pitch Sequence Recommender")
 
+# Prominent deployed-commit banner and artifact presence check (helps hosted debugging)
+try:
+    import subprocess, os
+    short_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+    model_path = os.path.exists("artifacts/runvalue_model.pkl")
+    ars_path = os.path.exists("pitcher_assets/pitcher_arsenals.csv")
+    st.markdown(f"<div style='background:#fff3bf;padding:10px;border-radius:6px;margin-bottom:12px'><strong>Deployment</strong>: commit <code>{short_hash}</code> — model artifact present: <strong>{model_path}</strong> — pitcher_arsenals present: <strong>{ars_path}</strong></div>", unsafe_allow_html=True)
+except Exception:
+    # best-effort only — don't fail the app for banner rendering
+    pass
+
 # show current commit (best-effort) for deployed visibility
 try:
     import subprocess
