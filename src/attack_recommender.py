@@ -143,8 +143,8 @@ def map_pitch_to_location(pitch_type: str, archetype: str, situation: Dict[str, 
             return "middle-strike"
         return base
 
-    # situation-based tweaks
-    if situation.get("risp"):
+    # situation-based tweaks: if runners in scoring position (on 2B or 3B), try to induce grounders
+    if situation.get("on_2b") or situation.get("on_3b"):
         # try to induce grounders: aim low
         return base.replace("up", "low")
 
@@ -172,8 +172,8 @@ def recommend_sequence(arche_df: pd.DataFrame, ars_df: pd.DataFrame,
             if pt in ("FF", "CT", "FT"): score += 0.5
         if "Patient" in archetype:
             if pt in ("FF", "FT"): score += 1.0
-        # situation tweaks
-        if situation.get("late_inning") and situation.get("outs", 0) >= 2:
+        # situation tweaks: in high-out situations prefer chase/punchout pitches
+        if situation.get("outs", 0) >= 2:
             # prefer chase/punchout pitches (breaking)
             if pt in ("SL", "CU"): score += 0.7
         return score
@@ -297,10 +297,8 @@ def generate_strategy_notes(archetype: str, pitches: List[str], count: str, situ
         notes.append("Mix speeds and work edges to induce weak contact and avoid predictable locations.")
     if "Patient" in archetype:
         notes.append("Attack early in the count with strikes; use harder-to-hit chase pitches later.")
-    if situation.get("risp"):
+    if situation.get("on_2b") or situation.get("on_3b"):
         notes.append("RISP: prefer low pitches to induce grounders and avoid big hits.")
-    if situation.get("late_inning"):
-        notes.append("Late inning: favor strikeout/weak-contact pitches.")
     notes.append(f"Count considered: {count}.")
     return " ".join(notes)
 
@@ -356,3 +354,42 @@ if __name__ == "__main__":
         example_run()
     else:
         interactive_cli()
+
+
+def load_batter_pitchtype_stats(path: str = "data/processed/features.parquet"):
+    """Load precomputed batter vs pitch_type matchup stats (if available).
+
+    Returns a DataFrame keyed by (batter, pitch_type, p_throws) with columns:
+      batter_pitchtype_woba, batter_pitchtype_whiff_rate, batter_pitchtype_run_value
+    """
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        df = pd.read_parquet(p)
+        # keep only the matchup columns
+        cols = ["batter", "pitch_type", "p_throws", "batter_pitchtype_woba", "batter_pitchtype_whiff_rate", "batter_pitchtype_run_value"]
+        available = [c for c in cols if c in df.columns]
+        if not available:
+            return None
+        stats = df[available].drop_duplicates(subset=[c for c in ["batter", "pitch_type", "p_throws"] if c in df.columns])
+        return stats
+    except Exception:
+        return None
+
+
+def get_batter_pitchtype_stats(stats_df, batter_id, pitch_type, p_throws="R"):
+    """Return a tuple (woba, whiff_rate, run_value) for the batter/pitch_type or (0,0,0) if missing."""
+    if stats_df is None:
+        return 0.0, 0.0, 0.0
+    try:
+        filt = (stats_df["batter"].astype(str) == str(batter_id)) & (stats_df["pitch_type"].astype(str) == str(pitch_type))
+        if "p_throws" in stats_df.columns:
+            filt = filt & (stats_df["p_throws"].astype(str) == str(p_throws))
+        row = stats_df[filt]
+        if row.empty:
+            return 0.0, 0.0, 0.0
+        r = row.iloc[0]
+        return float(r.get("batter_pitchtype_woba", 0.0)), float(r.get("batter_pitchtype_whiff_rate", 0.0)), float(r.get("batter_pitchtype_run_value", 0.0))
+    except Exception:
+        return 0.0, 0.0, 0.0
