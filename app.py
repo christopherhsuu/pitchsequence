@@ -9,14 +9,32 @@ SRC_PATH = ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+IMPORT_ERROR = None
 try:
     from attack_recommender import load_data, recommend_sequence, get_archetype, get_next_pitch_candidates, map_pitch_to_location, load_batter_pitchtype_stats, get_batter_pitchtype_stats
     from predict import recommend_next_pitch, MODEL_PATH
 except Exception as e:
-    raise ImportError(f"Failed to import project modules from {SRC_PATH}: {e}")
+    # Don't raise here — show a helpful message in the UI so deployment isn't a blank page.
+    IMPORT_ERROR = e
 
 st.set_page_config(page_title="PitchSequence", layout="centered")
 st.title("PitchSequence — Pitch Sequence Recommender")
+
+# show current commit (best-effort) for deployed visibility
+try:
+    import subprocess
+    short_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+    st.caption(f"commit: {short_hash}")
+except Exception:
+    # ignore if git not available in the runtime
+    pass
+
+# If importing project modules failed, surface the error and stop the app
+if IMPORT_ERROR is not None:
+    import traceback
+    st.error("Failed to import project modules required by the app. See details below.")
+    st.text(traceback.format_exc())
+    st.stop()
 
 
 # Safe experimental rerun helper: prevents AttributeError when deployed
