@@ -18,6 +18,17 @@ except Exception as e:
 st.set_page_config(page_title="PitchSequence", layout="centered")
 st.title("PitchSequence — Pitch Sequence Recommender")
 
+
+# Safe experimental rerun helper: prevents AttributeError when deployed
+# to environments with older/newer Streamlit versions that don't expose
+# the experimental API. It's intentionally a no-op when unavailable.
+def _safe_rerun():
+    try:
+        if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
+            st.experimental_rerun()
+    except Exception:
+        return
+
 # Load data
 ARCH_PATH = Path("data/player_archetypes.csv")
 ARS_PATH = Path("pitcher_assets/pitcher_arsenals.csv")
