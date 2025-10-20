@@ -32,26 +32,95 @@ try:
         # fallback to subtle caption if sidebar isn't available
         st.caption(f"commit: {short_hash}  model: {model_path}  arsenals: {ars_path}")
 
-    # Diagnostics: check whether player name mapping CSVs exist and how many rows they contain.
+    # Verbose diagnostics: why are mapping CSVs not being read on the host?
     try:
+        import os as _os
+        import traceback as _tb
         from pathlib import Path as _P
+
+        _diag = {}
+        _diag['cwd'] = str(_os.getcwd())
+        _diag['cwd_listing'] = []
+        try:
+            _diag['cwd_listing'] = sorted(_os.listdir('.'))
+        except Exception:
+            _diag['cwd_listing'] = f'error: {_tb.format_exc()}'
+
+        # candidate paths
         _bmap = _P("data/raw/unique_batters_with_names.csv")
         _pmap = _P("data/raw/unique_pitchers_with_names.csv")
-        _b_exists = _bmap.exists()
-        _p_exists = _pmap.exists()
-        _b_count = None
-        _p_count = None
-        if _b_exists:
+        _candidates = [str(_bmap), str(_P('data') / _bmap.name), str(_P(_bmap.name))]
+        _diag['batter_candidates'] = _candidates
+        _diag['batter_exists'] = {c: _P(c).exists() for c in _candidates}
+        _diag['pitcher_candidates'] = [str(_pmap), str(_P('data') / _pmap.name), str(_P(_pmap.name))]
+        _diag['pitcher_exists'] = {c: _P(c).exists() for c in _diag['pitcher_candidates']}
+
+        # file sizes where present
+        def _size(pth):
             try:
-                _b_count = int(pd.read_csv(_bmap, usecols=[1]).shape[0])
+                return int(_P(pth).stat().st_size)
             except Exception:
-                _b_count = -1
-        if _p_exists:
+                return None
+
+        _diag['batter_sizes'] = {c: _size(c) for c in _diag['batter_candidates']}
+        _diag['pitcher_sizes'] = {c: _size(c) for c in _diag['pitcher_candidates']}
+
+        # try reading with pandas and capture errors
+        _diag['batter_read'] = None
+        for c in _diag['batter_candidates']:
             try:
-                _p_count = int(pd.read_csv(_pmap, usecols=[1]).shape[0])
+                if _P(c).exists():
+                    df = pd.read_csv(c)
+                    _diag['batter_read'] = {'path': c, 'rows': int(df.shape[0]), 'cols': int(df.shape[1])}
+                    break
             except Exception:
-                _p_count = -1
-        st.sidebar.markdown(f"**Mappings:** batters: {_b_exists} (rows: {_b_count}) — pitchers: {_p_exists} (rows: {_p_count})")
+                _diag.setdefault('batter_read_errors', []).append({'path': c, 'err': _tb.format_exc()})
+
+        _diag['pitcher_read'] = None
+        for c in _diag['pitcher_candidates']:
+            try:
+                if _P(c).exists():
+                    df = pd.read_csv(c)
+                    _diag['pitcher_read'] = {'path': c, 'rows': int(df.shape[0]), 'cols': int(df.shape[1])}
+                    break
+            except Exception:
+                _diag.setdefault('pitcher_read_errors', []).append({'path': c, 'err': _tb.format_exc()})
+
+        # try to fetch raw from GitHub (if network available)
+        try:
+            import requests as _req
+            _gh_base = globals().get('GITHUB_RAW_BASE', "https://raw.githubusercontent.com/christopherhsuu/pitchsequence/main/")
+            _gh_b = _gh_base + str(_P('data/raw') / _bmap.name)
+            _gh_p = _gh_base + str(_P('data/raw') / _pmap.name)
+            _diag['github_batter_fetch'] = None
+            _diag['github_pitcher_fetch'] = None
+            try:
+                r = _req.get(_gh_b, timeout=6)
+                _diag['github_batter_fetch'] = {'status': r.status_code, 'len': len(r.content)}
+            except Exception:
+                _diag['github_batter_fetch'] = {'error': _tb.format_exc()}
+            try:
+                r = _req.get(_gh_p, timeout=6)
+                _diag['github_pitcher_fetch'] = {'status': r.status_code, 'len': len(r.content)}
+            except Exception:
+                _diag['github_pitcher_fetch'] = {'error': _tb.format_exc()}
+        except Exception:
+            _diag['github_fetch_error'] = _tb.format_exc()
+
+        # include _MAP_SOURCES if available
+        try:
+            _diag['_MAP_SOURCES'] = globals().get('_MAP_SOURCES', {}).copy()
+        except Exception:
+            _diag['_MAP_SOURCES'] = None
+
+        # show a compact version in the sidebar and a full expander
+        try:
+            st.sidebar.markdown(f"**Mappings diagnostics:** batter_found={bool(_diag.get('batter_read'))} pitcher_found={bool(_diag.get('pitcher_read'))}")
+            with st.sidebar.expander('Mappings diagnostics (details)', expanded=False):
+                st.write(_diag)
+        except Exception:
+            # best-effort only
+            pass
     except Exception:
         # don't fail the app for diagnostics
         pass
