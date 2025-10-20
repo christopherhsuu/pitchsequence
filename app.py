@@ -20,6 +20,24 @@ except Exception as e:
 st.set_page_config(page_title="PitchSequence", layout="centered")
 st.title("PitchSequence — Pitch Sequence Recommender")
 
+# TEST BANNER: a very obvious red banner so we can verify deployed vs local parity.
+# Keep this near the top so it appears immediately on load. Remove after debugging.
+try:
+    import subprocess
+    try:
+        _test_short_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        _test_short_hash = "unknown"
+    st.markdown(
+        f"<div style='border:3px solid #e53e3e; background:#ffecec; padding:12px; color:#9b1c1c; font-weight:700; text-align:center;'>TEST BANNER — If you see this both locally and on the hosted site, parity is confirmed. Commit: {_test_short_hash}</div>",
+        unsafe_allow_html=True,
+    )
+except Exception:
+    # If rendering with HTML isn't allowed in the environment, fallback to a red error message
+    try:
+        st.error("TEST BANNER — If you see this both locally and on the hosted site, parity is confirmed.")
+    except Exception:
+        pass
 # Prominent deployed-commit banner and artifact presence check (helps hosted debugging)
 try:
     import subprocess, os
