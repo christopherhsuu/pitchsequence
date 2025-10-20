@@ -31,6 +31,30 @@ try:
     except Exception:
         # fallback to subtle caption if sidebar isn't available
         st.caption(f"commit: {short_hash}  model: {model_path}  arsenals: {ars_path}")
+
+    # Diagnostics: check whether player name mapping CSVs exist and how many rows they contain.
+    try:
+        from pathlib import Path as _P
+        _bmap = _P("data/raw/unique_batters_with_names.csv")
+        _pmap = _P("data/raw/unique_pitchers_with_names.csv")
+        _b_exists = _bmap.exists()
+        _p_exists = _pmap.exists()
+        _b_count = None
+        _p_count = None
+        if _b_exists:
+            try:
+                _b_count = int(pd.read_csv(_bmap, usecols=[1]).shape[0])
+            except Exception:
+                _b_count = -1
+        if _p_exists:
+            try:
+                _p_count = int(pd.read_csv(_pmap, usecols=[1]).shape[0])
+            except Exception:
+                _p_count = -1
+        st.sidebar.markdown(f"**Mappings:** batters: {_b_exists} (rows: {_b_count}) — pitchers: {_p_exists} (rows: {_p_count})")
+    except Exception:
+        # don't fail the app for diagnostics
+        pass
 except Exception:
     # best-effort only — don't fail the app for banner rendering
     pass
