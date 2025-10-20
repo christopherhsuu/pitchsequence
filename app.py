@@ -190,21 +190,57 @@ def _svg_coords_to_plate_xy(cx: float, cy: float):
 # Load name -> id mapping files (prefer data/raw versions if present)
 BATTER_MAP_PATH = Path("data/raw/unique_batters_with_names.csv")
 PITCHER_MAP_PATH = Path("data/raw/unique_pitchers_with_names.csv")
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/christopherhsuu/pitchsequence/main/"
+
+# record where each mapping was loaded from (for diagnostics)
+_MAP_SOURCES = {}
 
 def _load_name_map(p: Path, id_col: str = None):
-    if not p.exists():
-        return {}, []
+    """Load a mapping CSV from multiple candidate locations.
+
+    Tries these in order:
+      1. the provided path `p`
+      2. `data/` + basename(p)
+      3. top-level basename(p)
+      4. the GitHub raw URL for the file
+
+    Returns (mapping_dict, sorted_names_list). Records the successful source
+    in _MAP_SOURCES keyed by the basename.
+    """
+    name = p.name
+    candidates = [p, Path("data") / name, Path(name)]
+
+    for c in candidates:
+        try:
+            if c.exists():
+                df = pd.read_csv(c)
+                if df.shape[1] >= 2:
+                    id_col_name = df.columns[0]
+                    name_col = df.columns[1]
+                    mapping = {str(r[name_col]): str(r[id_col_name]) for _, r in df.iterrows()}
+                    names = sorted(list(mapping.keys()))
+                    _MAP_SOURCES[name] = str(c)
+                    return mapping, names
+        except Exception:
+            # try next candidate
+            continue
+
+    # Last resort: try to load from GitHub raw URL
     try:
-        df = pd.read_csv(p)
-        # expect first two columns to be id,name
+        url = GITHUB_RAW_BASE + str(Path("data/raw") / name)
+        df = pd.read_csv(url)
         if df.shape[1] >= 2:
             id_col_name = df.columns[0]
             name_col = df.columns[1]
             mapping = {str(r[name_col]): str(r[id_col_name]) for _, r in df.iterrows()}
             names = sorted(list(mapping.keys()))
+            _MAP_SOURCES[name] = url
             return mapping, names
     except Exception:
         pass
+
+    # nothing worked
+    _MAP_SOURCES[name] = None
     return {}, []
 
 batter_name_to_id, batter_names = _load_name_map(BATTER_MAP_PATH)
