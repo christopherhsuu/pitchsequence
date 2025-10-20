@@ -9,6 +9,4 @@ __pycache__/
 venv/
 .env/
 .DS_Store
-.streamlit/cache/
-.streamlit/secrets.toml
 data/raw/
