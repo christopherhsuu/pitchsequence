@@ -27,13 +27,9 @@ for balls,strikes in [(0,0),(2,1),(3,2)]:
     }
     print('===', balls, strikes)
     try:
-        best, val, preds, adjusted = recommend_next_pitch(state, pid)
+        best, val, preds = recommend_next_pitch(state, pid)
         print('best', best, val)
-        print('raw preds:')
-        for p, v in preds.items():
-            print(p, v)
-        print('adjusted probs:')
-        for p, v in adjusted.items():
+        for p,v in preds.items():
             print(p, v)
     except Exception as e:
         print('error', e)

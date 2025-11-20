@@ -12,7 +12,7 @@ if str(SRC_PATH) not in sys.path:
 IMPORT_ERROR = None
 try:
     from attack_recommender import load_data, recommend_sequence, get_archetype, get_next_pitch_candidates, map_pitch_to_location, load_batter_pitchtype_stats, get_batter_pitchtype_stats
-    from predict import recommend_next_pitch, MODEL_PATH, adjust_pitch_recommendation, get_cluster_features
+    from predict import recommend_next_pitch, MODEL_PATH
 except Exception as e:
     # Don't raise here — show a helpful message in the UI so deployment isn't a blank page.
     IMPORT_ERROR = e
@@ -476,7 +476,7 @@ if st.session_state.get("atbat_active"):
                     w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)
                     batter_stats_map[pt] = (w, wh, rv)
 
-                best_pt, best_val, preds, _ = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
+                best_pt, best_val, preds = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
                 # expose debug info for verification
                 with st.expander("Debug: model internals", expanded=False):
                     st.write({"model_used": True, "pitcher_id": pid, "batter_id": batter_id_val})
@@ -498,36 +498,9 @@ if st.session_state.get("atbat_active"):
                 s = sum(exps) if exps else 1.0
                 probs = [e / s for e in exps]
 
-                # build prob dict and attempt cluster-based adjustments
-                prob_dict = {p: prob for p, prob in zip(pitches, probs)}
-                # try to resolve cluster id for this batter from arche_df
-                cluster_id = None
-                try:
-                    if 'cluster' in arche_df.columns:
-                        r = arche_df[arche_df["batter"].astype(str) == str(batter_id)]
-                        if not r.empty:
-                            cluster_id = r.iloc[0].get('cluster')
-                except Exception:
-                    cluster_id = None
-
-                cluster_feats = None
-                try:
-                    if cluster_id is not None:
-                        cluster_feats = get_cluster_features(cluster_id)
-                except Exception:
-                    cluster_feats = None
-
-                adjusted = adjust_pitch_recommendation(prob_dict, cluster_feats)
-
                 for p, prob, rv in zip(pitches, probs, vals):
                     loc = map_pitch_to_location(p, get_archetype(arche_df, batter_id), situation)
-                    candidates.append({
-                        "pitch": p,
-                        "pct": round(adjusted.get(p, prob) * 100, 1),
-                        "location": loc,
-                        "expected_run_value": round(rv, 4),
-                        "expected_after_re": round(current_re + rv, 4)
-                    })
+                    candidates.append({"pitch": p, "pct": round(prob * 100, 1), "location": loc, "expected_run_value": round(rv, 4), "expected_after_re": round(current_re + rv, 4)})
             except Exception as me:
                 # model failed; fallback to heuristic
                 candidates = get_next_pitch_candidates(arche_df, ars_df, batter_id, pitcher_id, count_input, situation)
@@ -754,7 +727,7 @@ if st.session_state.get("atbat_active"):
                         w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)
                         batter_stats_map[pt] = (w, wh, rv)
 
-                    best_pt, best_val, preds, _ = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
+                    best_pt, best_val, preds = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
                     with st.expander("Debug: updated model internals", expanded=False):
                         st.write({"model_used": True, "pitcher_id": pid, "batter_id": batter_id_val})
                         st.write("batter_stats_map sample:", {k: batter_stats_map[k] for k in list(batter_stats_map)[:10]})
@@ -773,27 +746,9 @@ if st.session_state.get("atbat_active"):
                     s = sum(exps) if exps else 1.0
                     probs = [e / s for e in exps]
 
-                    # attempt cluster-based adjustment
-                    prob_dict = {p: prob for p, prob in zip(pitches, probs)}
-                    cluster_id = None
-                    try:
-                        if 'cluster' in arche_df.columns:
-                            r = arche_df[arche_df["batter"].astype(str) == str(st.session_state.get('batter_id'))]
-                            if not r.empty:
-                                cluster_id = r.iloc[0].get('cluster')
-                    except Exception:
-                        cluster_id = None
-                    cluster_feats = None
-                    try:
-                        if cluster_id is not None:
-                            cluster_feats = get_cluster_features(cluster_id)
-                    except Exception:
-                        cluster_feats = None
-                    adjusted = adjust_pitch_recommendation(prob_dict, cluster_feats)
-
                     for p, prob, rv, aer in zip(pitches, probs, vals, after_re):
                         loc = map_pitch_to_location(p, get_archetype(arche_df, st.session_state.get('batter_id')), st.session_state.get('situation', {}))
-                        candidates.append({"pitch": p, "pct": round(adjusted.get(p, prob) * 100, 1), "location": loc, "expected_run_value": round(rv, 4), "expected_after_re": round(aer, 4)})
+                        candidates.append({"pitch": p, "pct": round(prob * 100, 1), "location": loc, "expected_run_value": round(rv, 4), "expected_after_re": round(aer, 4)})
                 except Exception:
                     candidates = get_next_pitch_candidates(arche_df, ars_df, st.session_state.get('batter_id'), st.session_state.get('pitcher_id'), st.session_state.get('count'), st.session_state.get('situation', {}))
             else:
@@ -904,7 +859,7 @@ if st.session_state.get("atbat_active"):
                 w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)
                 batter_stats_map[pt] = (w, wh, rv)
 
-            ptype, val, preds, _ = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
+            ptype, val, preds = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
             # compute expected after-run-expectancy
             sit = st.session_state.get('situation', {})
             sit_rep = (int(sit.get("outs", 0)), f"{1 if sit.get('on_1b') else 0}{1 if sit.get('on_2b') else 0}{1 if sit.get('on_3b') else 0}")
