@@ -17,8 +17,71 @@ def load_data(archetypes_path: Path = ARCHETYPES_PATH, arsenals_path: Path = ARS
     Returns:
         (archetypes_df, arsenals_df)
     """
-    arche = pd.read_csv(archetypes_path)
-    ars = pd.read_csv(arsenals_path)
+    # Try several candidate locations for each file and fall back to a GitHub raw fetch.
+    def _try_read(path: Path, expected_cols=None, use_on_bad_lines=False):
+        candidates = [path, Path('data') / path.name, Path(path.name), Path(__file__).resolve().parent.parent / path]
+        for c in candidates:
+            try:
+                if c.exists():
+                    try:
+                        # first try the default fast C parser
+                        if use_on_bad_lines:
+                            return pd.read_csv(c, on_bad_lines='skip')
+                        return pd.read_csv(c)
+                    except Exception:
+                        # fallback to the python engine and skip bad lines (tolerant to stray headers/LFS pointers)
+                        try:
+                            return pd.read_csv(c, engine='python', on_bad_lines='skip')
+                        except Exception:
+                            # as a last resort, try to heuristically find the header line and read from there
+                            try:
+                                text = c.read_text(errors='replace')
+                                lines = text.splitlines()
+                                # locate the header line by expected column name if available
+                                header_idx = None
+                                if expected_cols and len(expected_cols) > 0:
+                                    target = expected_cols[0]
+                                    for i, L in enumerate(lines[:50]):
+                                        if target in L:
+                                            header_idx = i
+                                            break
+                                if header_idx is None:
+                                    # fallback: find first line that contains a comma (likely header)
+                                    for i, L in enumerate(lines[:50]):
+                                        if ',' in L:
+                                            header_idx = i
+                                            break
+                                if header_idx is not None:
+                                    import io
+                                    cleaned = '\n'.join(lines[header_idx:])
+                                    return pd.read_csv(io.StringIO(cleaned))
+                            except Exception:
+                                pass
+            except Exception:
+                continue
+
+        # Try GitHub raw (best-effort)
+        try:
+            import requests
+            gh_base = "https://raw.githubusercontent.com/christopherhsuu/pitchsequence/main/"
+            url = gh_base + str(Path('data') / path.name)
+            r = requests.get(url, timeout=6)
+            if r.status_code == 200:
+                import io
+                return pd.read_csv(io.StringIO(r.text))
+        except Exception:
+            pass
+
+        # give a harmless empty DataFrame with expected columns to avoid crashing the app
+        if expected_cols:
+            return pd.DataFrame(columns=expected_cols)
+        return pd.DataFrame()
+
+    arche_expected = ["batter", "cluster", "label"]
+    ars_expected = ["pitcher", "pitch_type"]
+
+    arche = _try_read(archetypes_path, expected_cols=arche_expected)
+    ars = _try_read(arsenals_path, expected_cols=ars_expected, use_on_bad_lines=True)
     return arche, ars
 
 

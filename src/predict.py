@@ -72,6 +72,62 @@ def recommend_next_pitch(state: dict, pitcher_id: int, batter_stats_map: dict = 
     if X.shape[0] == 0:
         raise ValueError("Model input X is empty — cannot predict")
     preds = model.predict(X)
-    best_idx = preds.argmin()
-    return pitches[best_idx], float(preds[best_idx]), dict(zip(pitches, preds))
+    best_idx = int(preds.argmin())
+
+    # return 4 values for callers that expect debug info as the 4th element
+    preds_dict = dict(zip(pitches, preds))
+    debug_rows = X.to_dict(orient="records")
+    return pitches[best_idx], float(preds[best_idx]), preds_dict, debug_rows
+
+
+def get_cluster_features(cluster_id):
+    """Return cluster-specific feature adjustments.
+
+    This is a small, tolerant helper that attempts to load cluster-based
+    adjustments from disk if present, otherwise returns None. The app
+    treats ``None`` as "no adjustment".
+    """
+    try:
+        # optional artifact: artifacts/cluster_pitch_adjustments.csv
+        p = ARTIFACTS_DIR / "cluster_pitch_adjustments.csv"
+        if p.exists():
+            df = pd.read_csv(p)
+            # expect columns: cluster, pitch_type, multiplier
+            sub = df[df["cluster"] == cluster_id]
+            if sub.empty:
+                return None
+            return {r["pitch_type"]: float(r.get("multiplier", 1.0)) for _, r in sub.iterrows()}
+    except Exception:
+        # be tolerant; callers handle None
+        return None
+
+
+def adjust_pitch_recommendation(prob_dict, cluster_feats=None):
+    """Adjust pitch probabilities based on cluster features.
+
+    prob_dict: mapping pitch_type -> probability
+    cluster_feats: None or mapping pitch_type->multiplier
+
+    If cluster_feats is None, returns prob_dict unchanged. Otherwise
+    multiplies each probability by the given multiplier (default 1.0)
+    and re-normalizes to sum to 1.0.
+    """
+    if not prob_dict:
+        return prob_dict
+    if not cluster_feats:
+        return prob_dict
+
+    # apply multipliers
+    adjusted = {}
+    for p, prob in prob_dict.items():
+        mult = float(cluster_feats.get(p, 1.0)) if isinstance(cluster_feats, dict) else 1.0
+        adjusted[p] = prob * mult
+
+    total = sum(adjusted.values())
+    if total <= 0:
+        # fallback to original distribution if something went wrong
+        return prob_dict
+    for p in adjusted:
+        adjusted[p] = adjusted[p] / total
+    return adjusted
 
