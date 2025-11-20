@@ -1,7 +1,10 @@
 data/raw/statcast_2025.csv filter=lfs diff=lfs merge=lfs -text
+<<<<<<< HEAD
 git filter=lfs diff=lfs merge=lfs -text
 lfs filter=lfs diff=lfs merge=lfs -text
 track filter=lfs diff=lfs merge=lfs -text
 data/raw/unique_pitchers.csv filter=lfs diff=lfs merge=lfs -text
 data/raw/statcast_2025 filter=lfs diff=lfs merge=lfs -text
 *.csv filter=lfs diff=lfs merge=lfs -text
+=======
+>>>>>>> 705c2deadaf8b6530d95a2a480e2f20b46547fd0
