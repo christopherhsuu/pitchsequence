@@ -35,7 +35,18 @@ if IMPORT_ERROR is not None:
 
 ARCH_PATH = Path("data/player_archetypes.csv")
 ARS_PATH = Path("pitcher_assets/pitcher_arsenals.csv")
-arche_df, ars_df = load_data(ARCH_PATH, ARS_PATH)
+try:
+    arche_df, ars_df = load_data(ARCH_PATH, ARS_PATH)
+except FileNotFoundError as fe:
+    # Handle missing files gracefully in deployed environments where data may live elsewhere
+    st.sidebar.error(f"Data files not found: {fe}")
+    arche_df = pd.DataFrame(columns=["batter", "cluster", "label"])
+    ars_df = pd.DataFrame(columns=["pitcher", "pitch_type"])
+except Exception as e:
+    # Generic fallback: don't crash the app during startup; surface the error and continue with empty frames
+    st.sidebar.error(f"Failed to load archetypes/arsenals: {e}")
+    arche_df = pd.DataFrame(columns=["batter", "cluster", "label"])
+    ars_df = pd.DataFrame(columns=["pitcher", "pitch_type"])
 
 # Debug: Check if arsenals loaded correctly
 if ars_df.empty or "pitcher" not in ars_df.columns:
