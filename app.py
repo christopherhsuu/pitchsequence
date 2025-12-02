@@ -522,40 +522,76 @@ def _load_name_map(p: Path, id_col: str = None):
 batter_name_to_id, batter_names = _load_name_map(BATTER_MAP_PATH)
 pitcher_name_to_id, pitcher_names = _load_name_map(PITCHER_MAP_PATH)
 
-st.markdown("Select a batter and pitcher, set the count and base occupancy, then click 'Start at-bat'. Visuals show suggested locations and model probabilities.")
+st.markdown("Set up the game situation and start the at-bat. Click bases to toggle runners, click outs circles to change count.")
 st.session_state.setdefault("atbat_active", False)
+
+# Initialize setup state
+st.session_state.setdefault("setup_on_1b", False)
+st.session_state.setdefault("setup_on_2b", False)
+st.session_state.setdefault("setup_on_3b", False)
+st.session_state.setdefault("setup_outs", 0)
 
 # ensure submit exists even if form isn't rendered
 submit = False
 
 if not st.session_state.get("atbat_active"):
-    with st.form(key='start_atbat'):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            # Batter selectbox (names-only)
-            if batter_names:
-                batter_name = st.selectbox("Batter (select name)", options=batter_names, index=0, help="Choose batter by name; maps to internal id automatically")
-            else:
-                batter_name = st.text_input("Batter name (no id)", value="", placeholder="Type batter name")
+    # Player selection
+    col1, col2 = st.columns(2)
+    with col1:
+        if batter_names:
+            batter_name = st.selectbox("⚾ Batter", options=batter_names, index=0)
+        else:
+            batter_name = st.text_input("⚾ Batter", value="", placeholder="Type batter name")
 
-            # Pitcher selectbox (names-only)
-            if pitcher_names:
-                pitcher_name = st.selectbox("Pitcher (select name)", options=pitcher_names, index=0, help="Choose pitcher by name; known arsenals will be used")
-            else:
-                pitcher_name = st.text_input("Pitcher name (no id)", value="", placeholder="Type pitcher name")
+    with col2:
+        if pitcher_names:
+            pitcher_name = st.selectbox("🥎 Pitcher", options=pitcher_names, index=0)
+        else:
+            pitcher_name = st.text_input("🥎 Pitcher", value="", placeholder="Type pitcher name")
 
-            count_input = st.text_input("Count (balls-strikes)", value="0-0", placeholder="e.g. 0-0, 1-2")
+    count_input = st.text_input("Count (balls-strikes)", value="0-0", placeholder="e.g. 0-0, 1-2")
 
-        with col2:
-            st.subheader("Game Situation")
-            on_1b = st.checkbox("Runner on 1st", key="setup_on_1b")
-            on_2b = st.checkbox("Runner on 2nd", key="setup_on_2b")
-            on_3b = st.checkbox("Runner on 3rd", key="setup_on_3b")
-            outs = st.selectbox("Outs", [0, 1, 2], index=0)
-            # Show preview of diamond
-            st.markdown(render_baseball_diamond(on_1b, on_2b, on_3b, outs), unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("### Game Situation - Click to Toggle")
 
-        submit = st.form_submit_button("Start at-bat")
+    # MLB-style scorebug interface
+    col_diamond, col_outs = st.columns([2, 1])
+
+    with col_diamond:
+        st.markdown("**Bases (click to toggle runners)**")
+        # Create interactive base buttons
+        base_col1, base_col2, base_col3 = st.columns([1, 1, 1])
+
+        with base_col1:
+            if st.button("1st Base" + (" 🔴" if st.session_state["setup_on_1b"] else " ⚪"), key="btn_1b", use_container_width=True):
+                st.session_state["setup_on_1b"] = not st.session_state["setup_on_1b"]
+                st.rerun()
+
+        with base_col2:
+            if st.button("2nd Base" + (" 🔴" if st.session_state["setup_on_2b"] else " ⚪"), key="btn_2b", use_container_width=True):
+                st.session_state["setup_on_2b"] = not st.session_state["setup_on_2b"]
+                st.rerun()
+
+        with base_col3:
+            if st.button("3rd Base" + (" 🔴" if st.session_state["setup_on_3b"] else " ⚪"), key="btn_3b", use_container_width=True):
+                st.session_state["setup_on_3b"] = not st.session_state["setup_on_3b"]
+                st.rerun()
+
+    with col_outs:
+        st.markdown("**Outs (click to cycle)**")
+        outs_display = "●" * st.session_state["setup_outs"] + "○" * (3 - st.session_state["setup_outs"])
+        if st.button(f"{outs_display} ({st.session_state['setup_outs']} outs)", key="btn_outs", use_container_width=True):
+            st.session_state["setup_outs"] = (st.session_state["setup_outs"] + 1) % 3
+            st.rerun()
+
+    # Store current selections for form submission
+    on_1b = st.session_state["setup_on_1b"]
+    on_2b = st.session_state["setup_on_2b"]
+    on_3b = st.session_state["setup_on_3b"]
+    outs = st.session_state["setup_outs"]
+
+    st.markdown("---")
+    submit = st.button("▶️ Start At-Bat", type="primary", use_container_width=True)
 
 if submit:
     # Resolve selected names to ids (keep names-only in UI)
