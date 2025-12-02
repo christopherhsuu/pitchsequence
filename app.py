@@ -113,9 +113,18 @@ try:
         except Exception:
             _diag['_MAP_SOURCES'] = None
 
+        # check run expectancy map
+        try:
+            _re_map = globals().get('_RE_MAP', {})
+            _diag['_RE_MAP_loaded'] = bool(_re_map)
+            _diag['_RE_MAP_size'] = len(_re_map) if _re_map else 0
+            _diag['_RE_MAP_sample'] = dict(list(_re_map.items())[:3]) if _re_map else {}
+        except Exception:
+            _diag['_RE_MAP_error'] = _tb.format_exc()
+
         # show a compact version in the sidebar and a full expander
         try:
-            st.sidebar.markdown(f"**Mappings diagnostics:** batter_found={bool(_diag.get('batter_read'))} pitcher_found={bool(_diag.get('pitcher_read'))}")
+            st.sidebar.markdown(f"**Mappings diagnostics:** batter_found={bool(_diag.get('batter_read'))} pitcher_found={bool(_diag.get('pitcher_read'))} RE_map={_diag.get('_RE_MAP_size', 0)} entries")
             with st.sidebar.expander('Mappings diagnostics (details)', expanded=False):
                 st.write(_diag)
         except Exception:
@@ -226,15 +235,42 @@ arche_df, ars_df = load_data(ARCH_PATH, ARS_PATH)
 _batter_pitch_stats_df = load_batter_pitchtype_stats()
 
 
-def _load_run_expectancy(path: str = "static/run_expectancy_24.csv"):
-    p = Path(path)
-    if not p.exists():
-        return {}
+def _load_run_expectancy():
+    """Load run expectancy matrix from CSV file.
+
+    Tries multiple candidate paths in order:
+    1. static/run_expectancy_24.csv
+    2. run_expectancy_24.csv (top-level)
+    3. GitHub raw URL as fallback
+    """
+    candidates = [
+        Path("static/run_expectancy_24.csv"),
+        Path("run_expectancy_24.csv"),
+    ]
+
+    for p in candidates:
+        if p.exists():
+            try:
+                # Read bases_state as string to preserve leading zeros
+                df = pd.read_csv(p, dtype={'bases_state': str})
+                re_map = {(int(r.outs), str(r.bases_state)): float(r.run_expectancy) for r in df.itertuples()}
+                if re_map:  # Only return if we got data
+                    return re_map
+            except Exception:
+                continue
+
+    # Last resort: try GitHub raw URL
     try:
-        df = pd.read_csv(p)
-        return {(int(r.outs), str(r.bases_state)): float(r.run_expectancy) for r in df.itertuples()}
+        url = "https://raw.githubusercontent.com/christopherhsuu/pitchsequence/main/static/run_expectancy_24.csv"
+        df = pd.read_csv(url, dtype={'bases_state': str})
+        re_map = {(int(r.outs), str(r.bases_state)): float(r.run_expectancy) for r in df.itertuples()}
+        if re_map:
+            return re_map
     except Exception:
-        return {}
+        pass
+
+    # If all else fails, return empty dict
+    return {}
 
 
 _RE_MAP = _load_run_expectancy()
