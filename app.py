@@ -17,6 +17,122 @@ except Exception as e:
     # Don't raise here — show a helpful message in the UI so deployment isn't a blank page.
     IMPORT_ERROR = e
 
+# Pitch type color mapping for visual consistency
+PITCH_COLORS = {
+    "FF": "#ef4444",  # Red - Fastball
+    "SI": "#f97316",  # Orange - Sinker
+    "FC": "#f59e0b",  # Amber - Cutter
+    "SL": "#3b82f6",  # Blue - Slider
+    "CU": "#10b981",  # Green - Curveball
+    "CH": "#ec4899",  # Pink - Changeup
+    "FS": "#8b5cf6",  # Purple - Splitter
+    "KC": "#14b8a6",  # Teal - Knuckle Curve
+    "ST": "#6366f1",  # Indigo - Sweeper
+    "SV": "#06b6d4",  # Cyan - Slurve
+}
+
+def get_pitch_color(pitch_type):
+    """Return color for pitch type, with fallback to gray."""
+    return PITCH_COLORS.get(pitch_type, "#6b7280")
+
+def render_baseball_diamond(on_1b, on_2b, on_3b, outs):
+    """Render an SVG baseball diamond showing base runners and outs."""
+    diamond_svg = f'''
+    <svg width="200" height="180" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <!-- Diamond background -->
+        <path d="M 50 15 L 80 45 L 50 75 L 20 45 Z" fill="#86efac" stroke="#166534" stroke-width="2"/>
+
+        <!-- Home plate -->
+        <path d="M 50 85 L 45 80 L 45 75 L 55 75 L 55 80 Z" fill="#ffffff" stroke="#000" stroke-width="1"/>
+
+        <!-- Bases -->
+        <rect x="70" y="55" width="10" height="10" fill="{"#fbbf24" if on_1b else "#ffffff"}" stroke="#000" stroke-width="1" transform="rotate(45 75 60)"/>
+        <rect x="45" y="30" width="10" height="10" fill="{"#fbbf24" if on_2b else "#ffffff"}" stroke="#000" stroke-width="1" transform="rotate(45 50 35)"/>
+        <rect x="20" y="55" width="10" height="10" fill="{"#fbbf24" if on_3b else "#ffffff"}" stroke="#000" stroke-width="1" transform="rotate(45 25 60)"/>
+
+        <!-- Runner indicators -->
+        {"<circle cx='75' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_1b else ""}
+        {"<circle cx='50' cy='35' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_2b else ""}
+        {"<circle cx='25' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_3b else ""}
+
+        <!-- Outs indicator -->
+        <text x="50" y="95" font-size="6" text-anchor="middle" fill="#000">{"●" * outs}{"○" * (3-outs)} Outs</text>
+    </svg>
+    '''
+    return diamond_svg
+
+def render_count_display(count_str):
+    """Render a scoreboard-style count display."""
+    try:
+        balls, strikes = count_str.split('-')
+        balls = int(balls)
+        strikes = int(strikes)
+    except:
+        balls, strikes = 0, 0
+
+    count_svg = f'''
+    <svg width="200" height="100" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background -->
+        <rect width="200" height="100" fill="#1f2937" rx="8"/>
+
+        <!-- Balls label -->
+        <text x="50" y="25" font-size="12" fill="#9ca3af" text-anchor="middle" font-weight="bold">BALLS</text>
+        <!-- Balls indicators -->
+        {"".join([f'<circle cx="{20 + i*20}" cy="50" r="8" fill="#22c55e" stroke="#fff" stroke-width="2"/>' for i in range(balls)])}
+        {"".join([f'<circle cx="{20 + i*20}" cy="50" r="8" fill="#374151" stroke="#6b7280" stroke-width="2"/>' for i in range(balls, 4)])}
+
+        <!-- Strikes label -->
+        <text x="150" y="25" font-size="12" fill="#9ca3af" text-anchor="middle" font-weight="bold">STRIKES</text>
+        <!-- Strikes indicators -->
+        {"".join([f'<circle cx="{120 + i*20}" cy="50" r="8" fill="#ef4444" stroke="#fff" stroke-width="2"/>' for i in range(strikes)])}
+        {"".join([f'<circle cx="{120 + i*20}" cy="50" r="8" fill="#374151" stroke="#6b7280" stroke-width="2"/>' for i in range(strikes, 3)])}
+
+        <!-- Count text -->
+        <text x="100" y="85" font-size="18" fill="#ffffff" text-anchor="middle" font-weight="bold">{balls}-{strikes}</text>
+    </svg>
+    '''
+    return count_svg
+
+def render_pitch_history(history):
+    """Render a timeline of pitch history."""
+    if not history:
+        return "<p style='color: #6b7280; font-style: italic;'>No pitches thrown yet</p>"
+
+    history_html = "<div style='display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0;'>"
+    for i, h in enumerate(history):
+        pitch = h.get('pitch', '?')
+        outcome = h.get('outcome', '?')
+        count_before = h.get('count_before', '?')
+        color = get_pitch_color(pitch)
+
+        # Outcome indicator
+        if outcome == "Ball":
+            outcome_color = "#22c55e"
+            outcome_icon = "B"
+        elif "Strike" in outcome:
+            outcome_color = "#ef4444"
+            outcome_icon = "S"
+        elif "Foul" in outcome:
+            outcome_color = "#f97316"
+            outcome_icon = "F"
+        elif "In play" in outcome:
+            outcome_color = "#3b82f6"
+            outcome_icon = "IP"
+        else:
+            outcome_color = "#6b7280"
+            outcome_icon = "?"
+
+        history_html += f'''
+        <div style='border: 2px solid {color}; border-radius: 8px; padding: 8px 12px; background: #f9fafb; min-width: 100px;'>
+            <div style='font-weight: bold; color: {color}; font-size: 14px;'>{pitch}</div>
+            <div style='font-size: 11px; color: #6b7280;'>Count: {count_before}</div>
+            <div style='background: {outcome_color}; color: white; border-radius: 4px; padding: 2px 6px; font-size: 10px; margin-top: 4px; text-align: center;'>{outcome_icon}: {outcome}</div>
+        </div>
+        '''
+
+    history_html += "</div>"
+    return history_html
+
 st.set_page_config(page_title="PitchSequence", layout="centered")
 st.title("PitchSequence \u2014 Pitch Sequence Recommender")
 # Prominent deployed-commit banner and artifact presence check (helps hosted debugging)
@@ -431,17 +547,13 @@ if not st.session_state.get("atbat_active"):
             count_input = st.text_input("Count (balls-strikes)", value="0-0", placeholder="e.g. 0-0, 1-2")
 
         with col2:
-            st.subheader("Situation — base occupancy")
-            st.markdown("Select which bases are occupied (visual triangle).")
-            b1, b2, b3 = st.columns(3)
-            with b1:
-                on_1b = st.checkbox("1B")
-            with b2:
-                on_2b = st.checkbox("2B")
-            with b3:
-                on_3b = st.checkbox("3B")
-
+            st.subheader("Game Situation")
+            on_1b = st.checkbox("Runner on 1st", key="setup_on_1b")
+            on_2b = st.checkbox("Runner on 2nd", key="setup_on_2b")
+            on_3b = st.checkbox("Runner on 3rd", key="setup_on_3b")
             outs = st.selectbox("Outs", [0, 1, 2], index=0)
+            # Show preview of diamond
+            st.markdown(render_baseball_diamond(on_1b, on_2b, on_3b, outs), unsafe_allow_html=True)
 
         submit = st.form_submit_button("Start at-bat")
 
@@ -490,23 +602,52 @@ if st.session_state.get("atbat_active"):
     count_input = st.session_state.get("count")
     situation = st.session_state.get("situation")
 
+    # Matchup header
     archetype = get_archetype(arche_df, batter_id)
-    st.markdown(f"**Batter:** {batter_name} — **Archetype:** {archetype}")
-    # show pitcher arsenal if available (use resolved pitcher_id)
     pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(pitcher_id)]
     if not pitcher_row.empty:
         arsenal_list = pitcher_row["pitch_type"].astype(str).unique().tolist()
-        st.markdown(f"**Pitcher:** {pitcher_name} — arsenal: {', '.join(arsenal_list)}")
+        arsenal_display = ', '.join(arsenal_list)
     else:
-        st.markdown(f"**Pitcher:** {pitcher_name} — arsenal: unknown")
+        arsenal_display = "unknown"
 
-    # Calculate and display current run expectancy
-    sit_rep = (int(situation.get("outs", 0)),
-               f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}")
-    current_re = _RE_MAP.get(sit_rep, 0.0)
+    st.markdown(f"### {batter_name} vs {pitcher_name}")
+    col_matchup1, col_matchup2 = st.columns(2)
+    with col_matchup1:
+        st.markdown(f"**Batter Archetype:** {archetype}")
+    with col_matchup2:
+        st.markdown(f"**Pitcher Arsenal:** {arsenal_display}")
 
-    # Display current situation and run expectancy
-    st.markdown(f"**Current Situation:** Count {count_input}, {situation.get('outs', 0)} outs, Bases: {sit_rep[1]} — **Run Expectancy: {current_re:.2f} runs**")
+    st.markdown("---")
+
+    # Game state display: Count, Diamond, and Run Expectancy
+    col_state1, col_state2, col_state3 = st.columns([1, 1, 1])
+
+    with col_state1:
+        st.markdown("#### Count")
+        st.markdown(render_count_display(count_input), unsafe_allow_html=True)
+
+    with col_state2:
+        st.markdown("#### Bases & Outs")
+        st.markdown(render_baseball_diamond(
+            situation.get('on_1b', False),
+            situation.get('on_2b', False),
+            situation.get('on_3b', False),
+            situation.get('outs', 0)
+        ), unsafe_allow_html=True)
+
+    with col_state3:
+        st.markdown("#### Run Expectancy")
+        sit_rep = (int(situation.get("outs", 0)),
+                   f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}")
+        current_re = _RE_MAP.get(sit_rep, 0.0)
+        st.markdown(f"<div style='text-align: center; padding: 20px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; margin-top: 10px;'><div style='font-size: 36px; font-weight: bold; color: #166534;'>{current_re:.2f}</div><div style='font-size: 14px; color: #6b7280;'>Expected Runs</div></div>", unsafe_allow_html=True)
+
+    # Pitch history
+    st.markdown("---")
+    st.markdown("#### At-Bat History")
+    history = st.session_state.get("history", [])
+    st.markdown(render_pitch_history(history), unsafe_allow_html=True)
 
     # Show next-pitch candidates with percentages
     st.subheader("Next-pitch candidates")
@@ -714,32 +855,61 @@ if st.session_state.get("atbat_active"):
 
         for c in candidates:
             is_top = (c.get('pitch') == top_name)
-            # row container
-            with st.container():
-                left, right = st.columns([1, 1])
-                with left:
-                    # highlight top candidate
-                    if is_top:
-                        st.markdown(f"<div style='border-left:4px solid #2f855a; padding-left:8px'><strong>{c['pitch']}</strong> — {c.get('pct','?')}%<br/><small>expected after RE: {c.get('expected_after_re', '?')}</small></div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='padding-left:8px'><strong>{c['pitch']}</strong> — {c.get('pct','?')}%<br/><small>expected after RE: {c.get('expected_after_re', '?')}</small></div>", unsafe_allow_html=True)
-                with right:
-                    loc = c.get('location', '')
-                    cx, cy = _loc_to_svg_coords(loc)
-                    r, color = _prob_to_visuals(c.get('pct', 0))
-                    # slightly larger SVG for clarity; include title for tooltip
-                    svg = f'''<svg width="200" height="220" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <title>{c.get('pitch')} {c.get('pct','?')}% — expected after RE: {c.get('expected_after_re','?')}</title>
-                        <rect x="15" y="8" width="70" height="84" fill="#ffffff" stroke="#000" rx="4" />
-                        <text x="50" y="20" font-size="4" text-anchor="middle">{loc}</text>
-                        <circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" opacity="0.95" />
-                        <text x="50" y="98" font-size="5" text-anchor="middle">{c.get('pitch')} {c.get('pct','?')}%</text>
-                    </svg>'''
-                    # add subtle border if top
-                    if is_top:
-                        st.markdown(f"<div style='border:2px solid #2f855a; display:inline-block; padding:6px'>{svg}</div>", unsafe_allow_html=True)
-                    else:
-                        st.write(svg, unsafe_allow_html=True)
+            pitch_type = c.get('pitch')
+            pitch_color = get_pitch_color(pitch_type)
+            pct = c.get('pct', 0)
+            expected_re = c.get('expected_after_re', 0)
+
+            # row container with better styling
+            border_style = f"border: 3px solid {pitch_color}; background: #f9fafb;" if is_top else f"border: 2px solid #e5e7eb; background: #ffffff;"
+
+            card_html = f'''
+            <div style='{border_style} border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <div style='flex: 1;'>
+                        <div style='font-size: 24px; font-weight: bold; color: {pitch_color}; margin-bottom: 4px;'>
+                            {pitch_type} {"⭐" if is_top else ""}
+                        </div>
+                        <div style='font-size: 18px; color: #374151; margin-bottom: 8px;'>
+                            <strong>{pct}%</strong> recommendation
+                        </div>
+                        <div style='font-size: 14px; color: #6b7280;'>
+                            Expected RE after: <strong>{expected_re}</strong>
+                        </div>
+                        <div style='font-size: 12px; color: #9ca3af; margin-top: 4px;'>
+                            Location: {c.get('location', 'N/A')}
+                        </div>
+                    </div>
+                    <div style='flex: 0 0 auto;'>
+            '''
+
+            # Add strike zone visual
+            loc = c.get('location', '')
+            cx, cy = _loc_to_svg_coords(loc)
+            # Size circle based on probability
+            r = max(4, min(12, pct / 5))
+
+            card_html += f'''
+                        <svg width="140" height="160" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <title>{pitch_type} {pct}% — expected after RE: {expected_re}</title>
+                            <!-- Strike zone -->
+                            <rect x="15" y="8" width="70" height="84" fill="#f0f9ff" stroke="#1e40af" stroke-width="2" rx="4" />
+                            <!-- Zone grid -->
+                            <line x1="15" y1="36" x2="85" y2="36" stroke="#cbd5e1" stroke-width="0.5"/>
+                            <line x1="15" y1="64" x2="85" y2="64" stroke="#cbd5e1" stroke-width="0.5"/>
+                            <line x1="38" y1="8" x2="38" y2="92" stroke="#cbd5e1" stroke-width="0.5"/>
+                            <line x1="62" y1="8" x2="62" y2="92" stroke="#cbd5e1" stroke-width="0.5"/>
+                            <!-- Location marker -->
+                            <circle cx="{cx}" cy="{cy}" r="{r}" fill="{pitch_color}" opacity="0.85" stroke="#fff" stroke-width="2"/>
+                            <!-- Label -->
+                            <text x="50" y="5" font-size="5" text-anchor="middle" fill="#64748b">{loc}</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            '''
+
+            st.markdown(card_html, unsafe_allow_html=True)
 
                     # (visual target feature removed for clarity)
 
@@ -989,72 +1159,73 @@ if st.session_state.get("atbat_active"):
     # Optionally show model-based next pitch if model exists
     if MODEL_PATH.exists():
         st.markdown("---")
-        st.subheader("Model-based next-pitch estimate")
-        st.write("This uses the trained run-value model (if present) to score individual pitch choices.")
-        try:
-            pid = int(pitcher_id) if str(pitcher_id).isdigit() else pitcher_id
-            # parse count safely from session
-            count_input = st.session_state.get("count", "0-0")
-            balls_val = 0
-            strikes_val = 0
+        with st.expander("🔬 Model Analysis (Advanced)", expanded=False):
+            st.markdown("**Model-based next-pitch estimate**")
+            st.write("This uses the trained run-value model to score individual pitch choices.")
             try:
-                if '-' in count_input:
-                    b_s = count_input.split('-')
-                    balls_val = max(0, min(3, int(b_s[0])))
-                    strikes_val = max(0, min(2, int(b_s[1])))
-            except Exception:
+                pid = int(pitcher_id) if str(pitcher_id).isdigit() else pitcher_id
+                # parse count safely from session
+                count_input = st.session_state.get("count", "0-0")
                 balls_val = 0
                 strikes_val = 0
-            # get outs/base occupancy from session situation
-            sit = st.session_state.get("situation", {})
-            outs_val = int(sit.get("outs", 0))
-            on_1b_val = 1 if sit.get("on_1b") else 0
-            on_2b_val = 1 if sit.get("on_2b") else 0
-            on_3b_val = 1 if sit.get("on_3b") else 0
-            # Build a minimal state for model call — fill with defaults where missing
-            model_state = {
-                "balls": int(balls_val),
-                "strikes": int(strikes_val),
-                "outs_when_up": int(outs_val),
-                "on_1b": on_1b_val,
-                "on_2b": on_2b_val,
-                "on_3b": on_3b_val,
-                "release_speed": 94.0,
-                "release_spin_rate": 2200.0,
-                "zone": 5,
-                "plate_x": 0.0,
-                "plate_z": 2.5,
-                "last_pitch_speed_delta": 0.0,
-                "batter_pitchtype_woba": 0.0,
-                "batter_pitchtype_whiff_rate": 0.0,
-                "batter_pitchtype_run_value": 0.0,
-                "stand": "R",
-                "p_throws": "R",
-                "pitch_type": None,
-                "last_pitch_type": None,
-                "last_pitch_result": None
-            }
-            # build batter stats map for display
-            batter_id_val = st.session_state.get('batter_id')
-            batter_stats_map = {}
-            try:
-                pitcher_ars = ars_df[ars_df["pitcher"].astype(str) == str(pid)]["pitch_type"].astype(str).unique().tolist()
-            except Exception:
-                pitcher_ars = ["FF", "SL", "CU"]
-            for pt in pitcher_ars:
-                w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)
-                batter_stats_map[pt] = (w, wh, rv)
+                try:
+                    if '-' in count_input:
+                        b_s = count_input.split('-')
+                        balls_val = max(0, min(3, int(b_s[0])))
+                        strikes_val = max(0, min(2, int(b_s[1])))
+                except Exception:
+                    balls_val = 0
+                    strikes_val = 0
+                # get outs/base occupancy from session situation
+                sit = st.session_state.get("situation", {})
+                outs_val = int(sit.get("outs", 0))
+                on_1b_val = 1 if sit.get("on_1b") else 0
+                on_2b_val = 1 if sit.get("on_2b") else 0
+                on_3b_val = 1 if sit.get("on_3b") else 0
+                # Build a minimal state for model call — fill with defaults where missing
+                model_state = {
+                    "balls": int(balls_val),
+                    "strikes": int(strikes_val),
+                    "outs_when_up": int(outs_val),
+                    "on_1b": on_1b_val,
+                    "on_2b": on_2b_val,
+                    "on_3b": on_3b_val,
+                    "release_speed": 94.0,
+                    "release_spin_rate": 2200.0,
+                    "zone": 5,
+                    "plate_x": 0.0,
+                    "plate_z": 2.5,
+                    "last_pitch_speed_delta": 0.0,
+                    "batter_pitchtype_woba": 0.0,
+                    "batter_pitchtype_whiff_rate": 0.0,
+                    "batter_pitchtype_run_value": 0.0,
+                    "stand": "R",
+                    "p_throws": "R",
+                    "pitch_type": None,
+                    "last_pitch_type": None,
+                    "last_pitch_result": None
+                }
+                # build batter stats map for display
+                batter_id_val = st.session_state.get('batter_id')
+                batter_stats_map = {}
+                try:
+                    pitcher_ars = ars_df[ars_df["pitcher"].astype(str) == str(pid)]["pitch_type"].astype(str).unique().tolist()
+                except Exception:
+                    pitcher_ars = ["FF", "SL", "CU"]
+                for pt in pitcher_ars:
+                    w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)
+                    batter_stats_map[pt] = (w, wh, rv)
 
-            ptype, val, preds, _ = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
-            # compute expected after-run-expectancy
-            sit = st.session_state.get('situation', {})
-            sit_rep = (int(sit.get("outs", 0)), f"{1 if sit.get('on_1b') else 0}{1 if sit.get('on_2b') else 0}{1 if sit.get('on_3b') else 0}")
-            current_re = _RE_MAP.get(sit_rep, 0.0)
-            pitches = list(preds.keys())
-            vals = [preds[p] for p in pitches]
-            after_re = [current_re + v for v in vals]
-            st.success(f"Model recommends: **{ptype}**  (expected run value {val:+.3f}, expected after RE {current_re+val:+.3f})")
-            df = pd.DataFrame({"pitch_type": pitches, "expected_run_value": vals, "expected_after_re": after_re})
-            st.dataframe(df.sort_values("expected_after_re"))
-        except Exception as e:
-            st.warning(f"Model could not be used: {e}")
+                ptype, val, preds, _ = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
+                # compute expected after-run-expectancy
+                sit = st.session_state.get('situation', {})
+                sit_rep = (int(sit.get("outs", 0)), f"{1 if sit.get('on_1b') else 0}{1 if sit.get('on_2b') else 0}{1 if sit.get('on_3b') else 0}")
+                current_re = _RE_MAP.get(sit_rep, 0.0)
+                pitches = list(preds.keys())
+                vals = [preds[p] for p in pitches]
+                after_re = [current_re + v for v in vals]
+                st.success(f"Model recommends: **{ptype}**  (expected run value {val:+.3f}, expected after RE {current_re+val:+.3f})")
+                df = pd.DataFrame({"pitch_type": pitches, "expected_run_value": vals, "expected_after_re": after_re})
+                st.dataframe(df.sort_values("expected_after_re"))
+            except Exception as e:
+                st.warning(f"Model could not be used: {e}")
