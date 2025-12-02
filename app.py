@@ -775,16 +775,28 @@ if st.session_state.get("atbat_active"):
             continue_ab = False
 
         # convert walk/strikeout detection
+        walk_or_strikeout = False
         if b >= 4:
             continue_ab = False
-            st.success("Walk (4 balls)")
+            walk_or_strikeout = True
+            st.success("Walk (4 balls) - Count reset to 0-0 for next batter")
         if s >= 3:
             continue_ab = False
-            st.success("Strikeout (3 strikes)")
+            walk_or_strikeout = True
+            st.success("Strikeout (3 strikes) - Count reset to 0-0 for next batter")
 
-        # update count and at-bat state using the local continue_ab
-        st.session_state["count"] = f"{b}-{s}"
+        # update count: reset to 0-0 for walk/strikeout/in-play, otherwise update normally
+        if walk_or_strikeout or outcome.startswith("In play"):
+            st.session_state["count"] = "0-0"
+        else:
+            st.session_state["count"] = f"{b}-{s}"
+
         st.session_state["atbat_active"] = bool(continue_ab)
+
+        # update outs for strikeout
+        if s >= 3:
+            current_outs = st.session_state["situation"].get("outs", 0)
+            st.session_state["situation"]["outs"] = min(2, current_outs + 1)
 
         # update outs/history if in-play outcome
         if outcome.startswith("In play"):
