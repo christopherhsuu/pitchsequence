@@ -550,24 +550,21 @@ if not st.session_state.get("atbat_active"):
     col_diamond, col_outs = st.columns([3, 2])
 
     with col_diamond:
-        st.markdown("**Bases - Click buttons to toggle runners**")
+        st.markdown("**Bases - Check boxes to add runners**")
 
-        # Base toggle buttons first
+        # Use checkboxes that directly update and persist
         base_col1, base_col2, base_col3 = st.columns(3)
         with base_col1:
-            if st.button("Toggle 1st", key="btn_1b", use_container_width=True):
-                st.session_state["setup_on_1b"] = not st.session_state["setup_on_1b"]
-                st.rerun()
+            on_1b = st.checkbox("Runner on 1st", value=st.session_state.get("setup_on_1b", False), key="check_1b")
+            st.session_state["setup_on_1b"] = on_1b
         with base_col2:
-            if st.button("Toggle 2nd", key="btn_2b", use_container_width=True):
-                st.session_state["setup_on_2b"] = not st.session_state["setup_on_2b"]
-                st.rerun()
+            on_2b = st.checkbox("Runner on 2nd", value=st.session_state.get("setup_on_2b", False), key="check_2b")
+            st.session_state["setup_on_2b"] = on_2b
         with base_col3:
-            if st.button("Toggle 3rd", key="btn_3b", use_container_width=True):
-                st.session_state["setup_on_3b"] = not st.session_state["setup_on_3b"]
-                st.rerun()
+            on_3b = st.checkbox("Runner on 3rd", value=st.session_state.get("setup_on_3b", False), key="check_3b")
+            st.session_state["setup_on_3b"] = on_3b
 
-        # Then show the diamond visual (no comments to avoid escaping issues)
+        # Then show the diamond visual
         diamond_svg = render_baseball_diamond(
             st.session_state['setup_on_1b'],
             st.session_state['setup_on_2b'],
