@@ -1,6 +1,7 @@
 data/interim/
 data/processed/
-artifacts/
+artifacts/*.txt
+artifacts/*.log
 notebooks/.ipynb_checkpoints/
 __pycache__/
 *.pyc
@@ -8,4 +9,3 @@ __pycache__/
 venv/
 .env/
 .DS_Store
- 
