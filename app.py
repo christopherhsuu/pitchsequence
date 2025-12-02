@@ -35,23 +35,21 @@ def get_pitch_color(pitch_type):
     """Return color for pitch type, with fallback to gray."""
     return PITCH_COLORS.get(pitch_type, "#6b7280")
 
-def render_baseball_diamond(on_1b, on_2b, on_3b, outs):
-    """Render an SVG baseball diamond showing base runners and outs."""
+def render_baseball_diamond(on_1b, on_2b, on_3b, outs=0):
+    """Render an SVG baseball diamond showing base runners."""
     first_base_color = "#fbbf24" if on_1b else "#ffffff"
     second_base_color = "#fbbf24" if on_2b else "#ffffff"
     third_base_color = "#fbbf24" if on_3b else "#ffffff"
 
     runners_svg = ""
     if on_1b:
-        runners_svg += "<circle cx='75' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
+        runners_svg += "<circle cx='85' cy='50' r='5' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
     if on_2b:
-        runners_svg += "<circle cx='50' cy='35' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
+        runners_svg += "<circle cx='50' cy='15' r='5' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
     if on_3b:
-        runners_svg += "<circle cx='25' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
+        runners_svg += "<circle cx='15' cy='50' r='5' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
 
-    outs_circles = "●" * outs + "○" * (3-outs)
-
-    diamond_svg = f'''<div style="text-align: center;"><svg width="200" height="180" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 50 15 L 80 45 L 50 75 L 20 45 Z" fill="#86efac" stroke="#166534" stroke-width="2"/><path d="M 50 85 L 45 80 L 45 75 L 55 75 L 55 80 Z" fill="#ffffff" stroke="#000" stroke-width="1"/><rect x="70" y="55" width="10" height="10" fill="{first_base_color}" stroke="#000" stroke-width="1" transform="rotate(45 75 60)"/><rect x="45" y="30" width="10" height="10" fill="{second_base_color}" stroke="#000" stroke-width="1" transform="rotate(45 50 35)"/><rect x="20" y="55" width="10" height="10" fill="{third_base_color}" stroke="#000" stroke-width="1" transform="rotate(45 25 60)"/>{runners_svg}<text x="50" y="95" font-size="6" text-anchor="middle" fill="#000">{outs_circles} Outs</text></svg></div>'''
+    diamond_svg = f'''<div style="text-align: center; margin: 20px 0;"><svg width="240" height="240" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 50 10 L 90 50 L 50 90 L 10 50 Z" fill="#2d5016" stroke="#4ade80" stroke-width="2"/><path d="M 50 96 L 46 92 L 46 88 L 54 88 L 54 92 Z" fill="#ffffff" stroke="#000" stroke-width="1.5"/><rect x="80" y="45" width="10" height="10" fill="{first_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 85 50)"/><rect x="45" y="10" width="10" height="10" fill="{second_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 50 15)"/><rect x="10" y="45" width="10" height="10" fill="{third_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 15 50)"/>{runners_svg}</svg></div>'''
     return diamond_svg
 
 def render_count_display(count_str):
