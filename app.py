@@ -464,6 +464,14 @@ if st.session_state.get("atbat_active"):
     else:
         st.markdown(f"**Pitcher:** {pitcher_name} — arsenal: unknown")
 
+    # Calculate and display current run expectancy
+    sit_rep = (int(situation.get("outs", 0)),
+               f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}")
+    current_re = _RE_MAP.get(sit_rep, 0.0)
+
+    # Display current situation and run expectancy
+    st.markdown(f"**Current Situation:** Count {count_input}, {situation.get('outs', 0)} outs, Bases: {sit_rep[1]} — **Run Expectancy: {current_re:.2f} runs**")
+
     # Show next-pitch candidates with percentages
     st.subheader("Next-pitch candidates")
 
@@ -590,6 +598,16 @@ if st.session_state.get("atbat_active"):
             candidates = get_next_pitch_candidates(arche_df, ars_df, batter_id, pitcher_id, count_input, situation)
     else:
         candidates = get_next_pitch_candidates(arche_df, ars_df, batter_id, pitcher_id, count_input, situation)
+
+    # Add run expectancy values to heuristic candidates if not already present
+    if candidates and not any('expected_after_re' in c for c in candidates):
+        # Calculate current RE for this situation
+        sit_rep = (int(situation.get("outs", 0)),
+                   f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}")
+        current_re = _RE_MAP.get(sit_rep, 0.0)
+        # Add expected_after_re to each candidate (heuristic doesn't predict actual run values, so display current RE)
+        for c in candidates:
+            c['expected_after_re'] = round(current_re, 2)
 
     # Determine full pitcher arsenal (all pitch types this pitcher throws)
     pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(pitcher_id)]
