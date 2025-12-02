@@ -37,26 +37,27 @@ def get_pitch_color(pitch_type):
 
 def render_baseball_diamond(on_1b, on_2b, on_3b, outs):
     """Render an SVG baseball diamond showing base runners and outs."""
+    first_base_color = "#fbbf24" if on_1b else "#ffffff"
+    second_base_color = "#fbbf24" if on_2b else "#ffffff"
+    third_base_color = "#fbbf24" if on_3b else "#ffffff"
+
+    runner_1b = "<circle cx='75' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_1b else ""
+    runner_2b = "<circle cx='50' cy='35' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_2b else ""
+    runner_3b = "<circle cx='25' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_3b else ""
+
+    outs_display = "●" * outs + "○" * (3-outs)
+
     diamond_svg = f'''
     <svg width="200" height="180" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <!-- Diamond background -->
         <path d="M 50 15 L 80 45 L 50 75 L 20 45 Z" fill="#86efac" stroke="#166534" stroke-width="2"/>
-
-        <!-- Home plate -->
         <path d="M 50 85 L 45 80 L 45 75 L 55 75 L 55 80 Z" fill="#ffffff" stroke="#000" stroke-width="1"/>
-
-        <!-- Bases -->
-        <rect x="70" y="55" width="10" height="10" fill="{"#fbbf24" if on_1b else "#ffffff"}" stroke="#000" stroke-width="1" transform="rotate(45 75 60)"/>
-        <rect x="45" y="30" width="10" height="10" fill="{"#fbbf24" if on_2b else "#ffffff"}" stroke="#000" stroke-width="1" transform="rotate(45 50 35)"/>
-        <rect x="20" y="55" width="10" height="10" fill="{"#fbbf24" if on_3b else "#ffffff"}" stroke="#000" stroke-width="1" transform="rotate(45 25 60)"/>
-
-        <!-- Runner indicators -->
-        {"<circle cx='75' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_1b else ""}
-        {"<circle cx='50' cy='35' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_2b else ""}
-        {"<circle cx='25' cy='60' r='4' fill='#dc2626' stroke='#fff' stroke-width='1'/>" if on_3b else ""}
-
-        <!-- Outs indicator -->
-        <text x="50" y="95" font-size="6" text-anchor="middle" fill="#000">{"●" * outs}{"○" * (3-outs)} Outs</text>
+        <rect x="70" y="55" width="10" height="10" fill="{first_base_color}" stroke="#000" stroke-width="1" transform="rotate(45 75 60)"/>
+        <rect x="45" y="30" width="10" height="10" fill="{second_base_color}" stroke="#000" stroke-width="1" transform="rotate(45 50 35)"/>
+        <rect x="20" y="55" width="10" height="10" fill="{third_base_color}" stroke="#000" stroke-width="1" transform="rotate(45 25 60)"/>
+        {runner_1b}
+        {runner_2b}
+        {runner_3b}
+        <text x="50" y="95" font-size="6" text-anchor="middle" fill="#000">{outs_display} Outs</text>
     </svg>
     '''
     return diamond_svg
@@ -557,51 +558,9 @@ if not st.session_state.get("atbat_active"):
     col_diamond, col_outs = st.columns([3, 2])
 
     with col_diamond:
-        st.markdown("**Bases - Click to toggle runners**")
+        st.markdown("**Bases - Click buttons to toggle runners**")
 
-        # Create clickable diamond using HTML/CSS with buttons
-        diamond_html = f"""
-        <div style='position: relative; width: 280px; height: 280px; margin: 20px auto;'>
-            <svg width="280" height="280" viewBox="0 0 280 280">
-                <!-- Diamond field -->
-                <path d="M 140 40 L 240 140 L 140 240 L 40 140 Z" fill="#2d5016" stroke="#86efac" stroke-width="3"/>
-
-                <!-- Infield dirt -->
-                <path d="M 140 100 L 180 140 L 140 180 L 100 140 Z" fill="#8b7355" opacity="0.4"/>
-
-                <!-- Home plate -->
-                <path d="M 140 250 L 130 245 L 130 240 L 150 240 L 150 245 Z" fill="#ffffff" stroke="#000" stroke-width="2"/>
-
-                <!-- Second base (top) -->
-                <rect x="130" y="30" width="20" height="20" fill="{'#fbbf24' if st.session_state['setup_on_2b'] else '#ffffff'}"
-                      stroke="#000" stroke-width="2" transform="rotate(45 140 40)" style="cursor: pointer;"
-                      id="base-2b"/>
-
-                <!-- First base (right) -->
-                <rect x="230" y="130" width="20" height="20" fill="{'#fbbf24' if st.session_state['setup_on_1b'] else '#ffffff'}"
-                      stroke="#000" stroke-width="2" transform="rotate(45 240 140)" style="cursor: pointer;"
-                      id="base-1b"/>
-
-                <!-- Third base (left) -->
-                <rect x="30" y="130" width="20" height="20" fill="{'#fbbf24' if st.session_state['setup_on_3b'] else '#ffffff'}"
-                      stroke="#000" stroke-width="2" transform="rotate(45 40 140)" style="cursor: pointer;"
-                      id="base-3b"/>
-
-                <!-- Runner indicators -->
-                {f'<circle cx="240" cy="140" r="8" fill="#dc2626"/>' if st.session_state['setup_on_1b'] else ''}
-                {f'<circle cx="140" cy="40" r="8" fill="#dc2626"/>' if st.session_state['setup_on_2b'] else ''}
-                {f'<circle cx="40" cy="140" r="8" fill="#dc2626"/>' if st.session_state['setup_on_3b'] else ''}
-
-                <!-- Base labels -->
-                <text x="240" y="170" font-size="14" text-anchor="middle" fill="#ffffff">1B</text>
-                <text x="140" y="25" font-size="14" text-anchor="middle" fill="#ffffff">2B</text>
-                <text x="40" y="170" font-size="14" text-anchor="middle" fill="#ffffff">3B</text>
-            </svg>
-        </div>
-        """
-        st.markdown(diamond_html, unsafe_allow_html=True)
-
-        # Base toggle buttons below the diamond
+        # Base toggle buttons first
         base_col1, base_col2, base_col3 = st.columns(3)
         with base_col1:
             if st.button("Toggle 1st", key="btn_1b", use_container_width=True):
@@ -615,6 +574,15 @@ if not st.session_state.get("atbat_active"):
             if st.button("Toggle 3rd", key="btn_3b", use_container_width=True):
                 st.session_state["setup_on_3b"] = not st.session_state["setup_on_3b"]
                 st.rerun()
+
+        # Then show the diamond visual (no comments to avoid escaping issues)
+        diamond_svg = render_baseball_diamond(
+            st.session_state['setup_on_1b'],
+            st.session_state['setup_on_2b'],
+            st.session_state['setup_on_3b'],
+            st.session_state['setup_outs']
+        )
+        st.markdown(diamond_svg, unsafe_allow_html=True)
 
     with col_outs:
         st.markdown("**Outs**")
