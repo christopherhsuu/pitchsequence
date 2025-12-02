@@ -49,7 +49,7 @@ def render_baseball_diamond(on_1b, on_2b, on_3b, outs=0):
     if on_3b:
         runners_svg += "<circle cx='15' cy='50' r='5' fill='#dc2626' stroke='#fff' stroke-width='1'/>"
 
-    diamond_svg = f'''<div style="text-align: center; margin: 20px 0;"><svg width="240" height="240" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 50 10 L 90 50 L 50 90 L 10 50 Z" fill="#2d5016" stroke="#4ade80" stroke-width="2"/><path d="M 50 96 L 46 92 L 46 88 L 54 88 L 54 92 Z" fill="#ffffff" stroke="#000" stroke-width="1.5"/><rect x="80" y="45" width="10" height="10" fill="{first_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 85 50)"/><rect x="45" y="10" width="10" height="10" fill="{second_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 50 15)"/><rect x="10" y="45" width="10" height="10" fill="{third_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 15 50)"/>{runners_svg}</svg></div>'''
+    diamond_svg = f'<div style="text-align: center; margin: 20px 0;"><svg width="240" height="240" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 50 10 L 90 50 L 50 90 L 10 50 Z" fill="#2d5016" stroke="#4ade80" stroke-width="2"/><path d="M 50 96 L 46 92 L 46 88 L 54 88 L 54 92 Z" fill="#ffffff" stroke="#000" stroke-width="1.5"/><rect x="80" y="45" width="10" height="10" fill="{first_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 85 50)"/><rect x="45" y="10" width="10" height="10" fill="{second_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 50 15)"/><rect x="10" y="45" width="10" height="10" fill="{third_base_color}" stroke="#000" stroke-width="1.5" transform="rotate(45 15 50)"/>{runners_svg}</svg></div>'
     return diamond_svg
 
 def render_count_display(count_str):
@@ -61,27 +61,12 @@ def render_count_display(count_str):
     except:
         balls, strikes = 0, 0
 
-    count_svg = f'''
-    <svg width="200" height="100" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-        <!-- Background -->
-        <rect width="200" height="100" fill="#1f2937" rx="8"/>
+    balls_filled = "".join([f'<circle cx="{20 + i*20}" cy="50" r="8" fill="#22c55e" stroke="#fff" stroke-width="2"/>' for i in range(balls)])
+    balls_empty = "".join([f'<circle cx="{20 + i*20}" cy="50" r="8" fill="#374151" stroke="#6b7280" stroke-width="2"/>' for i in range(balls, 4)])
+    strikes_filled = "".join([f'<circle cx="{120 + i*20}" cy="50" r="8" fill="#ef4444" stroke="#fff" stroke-width="2"/>' for i in range(strikes)])
+    strikes_empty = "".join([f'<circle cx="{120 + i*20}" cy="50" r="8" fill="#374151" stroke="#6b7280" stroke-width="2"/>' for i in range(strikes, 3)])
 
-        <!-- Balls label -->
-        <text x="50" y="25" font-size="12" fill="#9ca3af" text-anchor="middle" font-weight="bold">BALLS</text>
-        <!-- Balls indicators -->
-        {"".join([f'<circle cx="{20 + i*20}" cy="50" r="8" fill="#22c55e" stroke="#fff" stroke-width="2"/>' for i in range(balls)])}
-        {"".join([f'<circle cx="{20 + i*20}" cy="50" r="8" fill="#374151" stroke="#6b7280" stroke-width="2"/>' for i in range(balls, 4)])}
-
-        <!-- Strikes label -->
-        <text x="150" y="25" font-size="12" fill="#9ca3af" text-anchor="middle" font-weight="bold">STRIKES</text>
-        <!-- Strikes indicators -->
-        {"".join([f'<circle cx="{120 + i*20}" cy="50" r="8" fill="#ef4444" stroke="#fff" stroke-width="2"/>' for i in range(strikes)])}
-        {"".join([f'<circle cx="{120 + i*20}" cy="50" r="8" fill="#374151" stroke="#6b7280" stroke-width="2"/>' for i in range(strikes, 3)])}
-
-        <!-- Count text -->
-        <text x="100" y="85" font-size="18" fill="#ffffff" text-anchor="middle" font-weight="bold">{balls}-{strikes}</text>
-    </svg>
-    '''
+    count_svg = f'<div style="text-align: center;"><svg width="200" height="100" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="100" fill="#1f2937" rx="8"/><text x="50" y="25" font-size="12" fill="#9ca3af" text-anchor="middle" font-weight="bold">BALLS</text>{balls_filled}{balls_empty}<text x="150" y="25" font-size="12" fill="#9ca3af" text-anchor="middle" font-weight="bold">STRIKES</text>{strikes_filled}{strikes_empty}<text x="100" y="85" font-size="18" fill="#ffffff" text-anchor="middle" font-weight="bold">{balls}-{strikes}</text></svg></div>'
     return count_svg
 
 def render_pitch_history(history):
@@ -918,25 +903,9 @@ if st.session_state.get("atbat_active"):
             # Size circle based on probability
             r = max(4, min(12, pct / 5))
 
-            card_html += f'''
-                        <svg width="140" height="160" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                            <title>{pitch_type} {pct}% — expected after RE: {expected_re}</title>
-                            <!-- Strike zone -->
-                            <rect x="15" y="8" width="70" height="84" fill="#f0f9ff" stroke="#1e40af" stroke-width="2" rx="4" />
-                            <!-- Zone grid -->
-                            <line x1="15" y1="36" x2="85" y2="36" stroke="#cbd5e1" stroke-width="0.5"/>
-                            <line x1="15" y1="64" x2="85" y2="64" stroke="#cbd5e1" stroke-width="0.5"/>
-                            <line x1="38" y1="8" x2="38" y2="92" stroke="#cbd5e1" stroke-width="0.5"/>
-                            <line x1="62" y1="8" x2="62" y2="92" stroke="#cbd5e1" stroke-width="0.5"/>
-                            <!-- Location marker -->
-                            <circle cx="{cx}" cy="{cy}" r="{r}" fill="{pitch_color}" opacity="0.85" stroke="#fff" stroke-width="2"/>
-                            <!-- Label -->
-                            <text x="50" y="5" font-size="5" text-anchor="middle" fill="#64748b">{loc}</text>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-            '''
+            strike_zone_svg = f'<svg width="140" height="160" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><title>{pitch_type} {pct}% — expected after RE: {expected_re}</title><rect x="15" y="8" width="70" height="84" fill="#f0f9ff" stroke="#1e40af" stroke-width="2" rx="4" /><line x1="15" y1="36" x2="85" y2="36" stroke="#cbd5e1" stroke-width="0.5"/><line x1="15" y1="64" x2="85" y2="64" stroke="#cbd5e1" stroke-width="0.5"/><line x1="38" y1="8" x2="38" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><line x1="62" y1="8" x2="62" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><circle cx="{cx}" cy="{cy}" r="{r}" fill="{pitch_color}" opacity="0.85" stroke="#fff" stroke-width="2"/><text x="50" y="5" font-size="5" text-anchor="middle" fill="#64748b">{loc}</text></svg>'
+
+            card_html += f'{strike_zone_svg}</div></div></div>'
 
             st.markdown(card_html, unsafe_allow_html=True)
 
@@ -1150,28 +1119,47 @@ if st.session_state.get("atbat_active"):
                 top_name = top_pitch.get('pitch')
             except Exception:
                 top_name = None
+
             for c in candidates:
                 is_top = (c.get('pitch') == top_name)
-                with st.container():
-                    left, right = st.columns([1, 1])
-                    with left:
-                        if is_top:
-                            st.markdown(f"<div style='border-left:4px solid #2f855a; padding-left:8px'><strong>{c['pitch']}</strong> — {c.get('pct','?')}%<br/><small>expected after RE: {c.get('expected_after_re', '?')}</small></div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"<div style='padding-left:8px'><strong>{c['pitch']}</strong> — {c.get('pct','?')}%<br/><small>expected after RE: {c.get('expected_after_re', '?')}</small></div>", unsafe_allow_html=True)
-                    with right:
-                        loc = c.get('location', '')
-                        cx, cy = _loc_to_svg_coords(loc)
-                        svg = f'''<svg width="200" height="220" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="15" y="8" width="70" height="84" fill="#ffffff" stroke="#000" rx="4" />
-                            <text x="50" y="20" font-size="4" text-anchor="middle">{loc}</text>
-                            <circle cx="{cx}" cy="{cy}" r="6" fill="#e53e3e" opacity="0.95" />
-                            <text x="50" y="98" font-size="5" text-anchor="middle">{c.get('pitch')} {c.get('pct','?')}%</text>
-                        </svg>'''
-                        if is_top:
-                            st.markdown(f"<div style='border:2px solid #2f855a; display:inline-block; padding:6px'>{svg}</div>", unsafe_allow_html=True)
-                        else:
-                            st.write(svg, unsafe_allow_html=True)
+                pitch_type = c.get('pitch')
+                pitch_color = get_pitch_color(pitch_type)
+                pct = c.get('pct', 0)
+                expected_re = c.get('expected_after_re', 0)
+
+                # Use the same card-based interface as the initial display
+                border_style = f"border: 3px solid {pitch_color}; background: #f9fafb;" if is_top else f"border: 2px solid #e5e7eb; background: #ffffff;"
+
+                card_html = f'''
+                <div style='{border_style} border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <div style='flex: 1;'>
+                            <div style='font-size: 24px; font-weight: bold; color: {pitch_color}; margin-bottom: 4px;'>
+                                {pitch_type} {"[TOP CHOICE]" if is_top else ""}
+                            </div>
+                            <div style='font-size: 18px; color: #374151; margin-bottom: 8px;'>
+                                <strong>{pct}%</strong> recommendation
+                            </div>
+                            <div style='font-size: 14px; color: #6b7280;'>
+                                Expected RE after: <strong>{expected_re}</strong>
+                            </div>
+                            <div style='font-size: 12px; color: #9ca3af; margin-top: 4px;'>
+                                Location: {c.get('location', 'N/A')}
+                            </div>
+                        </div>
+                        <div style='flex: 0 0 auto;'>
+                '''
+
+                # Add strike zone visual
+                loc = c.get('location', '')
+                cx, cy = _loc_to_svg_coords(loc)
+                r = max(4, min(12, pct / 5))
+
+                strike_zone_svg = f'<svg width="140" height="160" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><title>{pitch_type} {pct}% — expected after RE: {expected_re}</title><rect x="15" y="8" width="70" height="84" fill="#f0f9ff" stroke="#1e40af" stroke-width="2" rx="4" /><line x1="15" y1="36" x2="85" y2="36" stroke="#cbd5e1" stroke-width="0.5"/><line x1="15" y1="64" x2="85" y2="64" stroke="#cbd5e1" stroke-width="0.5"/><line x1="38" y1="8" x2="38" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><line x1="62" y1="8" x2="62" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><circle cx="{cx}" cy="{cy}" r="{r}" fill="{pitch_color}" opacity="0.85" stroke="#fff" stroke-width="2"/><text x="50" y="5" font-size="5" text-anchor="middle" fill="#64748b">{loc}</text></svg>'
+
+                card_html += f'{strike_zone_svg}</div></div></div>'
+
+                st.markdown(card_html, unsafe_allow_html=True)
     # Offer JSON export of the at-bat history and metadata
     import json as _json
     atbat_summary = {
