@@ -539,59 +539,97 @@ if not st.session_state.get("atbat_active"):
     col1, col2 = st.columns(2)
     with col1:
         if batter_names:
-            batter_name = st.selectbox("⚾ Batter", options=batter_names, index=0)
+            batter_name = st.selectbox("Batter", options=batter_names, index=0)
         else:
-            batter_name = st.text_input("⚾ Batter", value="", placeholder="Type batter name")
+            batter_name = st.text_input("Batter", value="", placeholder="Type batter name")
 
     with col2:
         if pitcher_names:
-            pitcher_name = st.selectbox("🥎 Pitcher", options=pitcher_names, index=0)
+            pitcher_name = st.selectbox("Pitcher", options=pitcher_names, index=0)
         else:
-            pitcher_name = st.text_input("🥎 Pitcher", value="", placeholder="Type pitcher name")
+            pitcher_name = st.text_input("Pitcher", value="", placeholder="Type pitcher name")
 
     count_input = st.text_input("Count (balls-strikes)", value="0-0", placeholder="e.g. 0-0, 1-2")
 
     st.markdown("---")
-    st.markdown("### Game Situation - Click to Toggle")
+    st.markdown("### Game Situation")
 
-    # MLB-style scorebug interface
-    col_diamond, col_outs = st.columns([2, 1])
+    col_diamond, col_outs = st.columns([3, 2])
 
     with col_diamond:
-        st.markdown("**Bases (click to toggle runners)**")
-        # Create interactive base buttons
-        base_col1, base_col2, base_col3 = st.columns([1, 1, 1])
+        st.markdown("**Bases - Click to toggle runners**")
 
+        # Create clickable diamond using HTML/CSS with buttons
+        diamond_html = f"""
+        <div style='position: relative; width: 280px; height: 280px; margin: 20px auto;'>
+            <svg width="280" height="280" viewBox="0 0 280 280">
+                <!-- Diamond field -->
+                <path d="M 140 40 L 240 140 L 140 240 L 40 140 Z" fill="#2d5016" stroke="#86efac" stroke-width="3"/>
+
+                <!-- Infield dirt -->
+                <path d="M 140 100 L 180 140 L 140 180 L 100 140 Z" fill="#8b7355" opacity="0.4"/>
+
+                <!-- Home plate -->
+                <path d="M 140 250 L 130 245 L 130 240 L 150 240 L 150 245 Z" fill="#ffffff" stroke="#000" stroke-width="2"/>
+
+                <!-- Second base (top) -->
+                <rect x="130" y="30" width="20" height="20" fill="{'#fbbf24' if st.session_state['setup_on_2b'] else '#ffffff'}"
+                      stroke="#000" stroke-width="2" transform="rotate(45 140 40)" style="cursor: pointer;"
+                      id="base-2b"/>
+
+                <!-- First base (right) -->
+                <rect x="230" y="130" width="20" height="20" fill="{'#fbbf24' if st.session_state['setup_on_1b'] else '#ffffff'}"
+                      stroke="#000" stroke-width="2" transform="rotate(45 240 140)" style="cursor: pointer;"
+                      id="base-1b"/>
+
+                <!-- Third base (left) -->
+                <rect x="30" y="130" width="20" height="20" fill="{'#fbbf24' if st.session_state['setup_on_3b'] else '#ffffff'}"
+                      stroke="#000" stroke-width="2" transform="rotate(45 40 140)" style="cursor: pointer;"
+                      id="base-3b"/>
+
+                <!-- Runner indicators -->
+                {f'<circle cx="240" cy="140" r="8" fill="#dc2626"/>' if st.session_state['setup_on_1b'] else ''}
+                {f'<circle cx="140" cy="40" r="8" fill="#dc2626"/>' if st.session_state['setup_on_2b'] else ''}
+                {f'<circle cx="40" cy="140" r="8" fill="#dc2626"/>' if st.session_state['setup_on_3b'] else ''}
+
+                <!-- Base labels -->
+                <text x="240" y="170" font-size="14" text-anchor="middle" fill="#ffffff">1B</text>
+                <text x="140" y="25" font-size="14" text-anchor="middle" fill="#ffffff">2B</text>
+                <text x="40" y="170" font-size="14" text-anchor="middle" fill="#ffffff">3B</text>
+            </svg>
+        </div>
+        """
+        st.markdown(diamond_html, unsafe_allow_html=True)
+
+        # Base toggle buttons below the diamond
+        base_col1, base_col2, base_col3 = st.columns(3)
         with base_col1:
-            if st.button("1st Base" + (" 🔴" if st.session_state["setup_on_1b"] else " ⚪"), key="btn_1b", use_container_width=True):
+            if st.button("Toggle 1st", key="btn_1b", use_container_width=True):
                 st.session_state["setup_on_1b"] = not st.session_state["setup_on_1b"]
                 st.rerun()
-
         with base_col2:
-            if st.button("2nd Base" + (" 🔴" if st.session_state["setup_on_2b"] else " ⚪"), key="btn_2b", use_container_width=True):
+            if st.button("Toggle 2nd", key="btn_2b", use_container_width=True):
                 st.session_state["setup_on_2b"] = not st.session_state["setup_on_2b"]
                 st.rerun()
-
         with base_col3:
-            if st.button("3rd Base" + (" 🔴" if st.session_state["setup_on_3b"] else " ⚪"), key="btn_3b", use_container_width=True):
+            if st.button("Toggle 3rd", key="btn_3b", use_container_width=True):
                 st.session_state["setup_on_3b"] = not st.session_state["setup_on_3b"]
                 st.rerun()
 
     with col_outs:
-        st.markdown("**Outs (click to cycle)**")
-        outs_display = "●" * st.session_state["setup_outs"] + "○" * (3 - st.session_state["setup_outs"])
-        if st.button(f"{outs_display} ({st.session_state['setup_outs']} outs)", key="btn_outs", use_container_width=True):
-            st.session_state["setup_outs"] = (st.session_state["setup_outs"] + 1) % 3
-            st.rerun()
+        st.markdown("**Outs**")
+        outs = st.radio("", options=[0, 1, 2], index=st.session_state["setup_outs"],
+                        format_func=lambda x: f"{x} out" + ("s" if x != 1 else ""),
+                        key="outs_radio")
+        st.session_state["setup_outs"] = outs
 
     # Store current selections for form submission
     on_1b = st.session_state["setup_on_1b"]
     on_2b = st.session_state["setup_on_2b"]
     on_3b = st.session_state["setup_on_3b"]
-    outs = st.session_state["setup_outs"]
 
     st.markdown("---")
-    submit = st.button("▶️ Start At-Bat", type="primary", use_container_width=True)
+    submit = st.button("Start At-Bat", type="primary", use_container_width=True)
 
 if submit:
     # Resolve selected names to ids (keep names-only in UI)
@@ -904,7 +942,7 @@ if st.session_state.get("atbat_active"):
                 <div style='display: flex; justify-content: space-between; align-items: center;'>
                     <div style='flex: 1;'>
                         <div style='font-size: 24px; font-weight: bold; color: {pitch_color}; margin-bottom: 4px;'>
-                            {pitch_type} {"⭐" if is_top else ""}
+                            {pitch_type} {"[TOP CHOICE]" if is_top else ""}
                         </div>
                         <div style='font-size: 18px; color: #374151; margin-bottom: 8px;'>
                             <strong>{pct}%</strong> recommendation
@@ -1195,7 +1233,7 @@ if st.session_state.get("atbat_active"):
     # Optionally show model-based next pitch if model exists
     if MODEL_PATH.exists():
         st.markdown("---")
-        with st.expander("🔬 Model Analysis (Advanced)", expanded=False):
+        with st.expander("Model Analysis (Advanced)", expanded=False):
             st.markdown("**Model-based next-pitch estimate**")
             st.write("This uses the trained run-value model to score individual pitch choices.")
             try:
