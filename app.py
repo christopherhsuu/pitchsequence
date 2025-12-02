@@ -592,13 +592,33 @@ if st.session_state.get("atbat_active"):
                 current_re = _RE_MAP.get(sit_rep, 0.0)
                 after_re = [current_re + v for v in vals]
                 neg = [-v for v in after_re]
-                max_neg = max(neg) if neg else 0.0
-                exps = [math.exp(x - max_neg) for x in neg]
+
+                # Apply temperature to soften probabilities (higher temp = more uniform distribution)
+                # Using temp=5.0 to prevent one pitch from completely dominating
+                temperature = 5.0
+                neg_scaled = [x / temperature for x in neg]
+                max_neg = max(neg_scaled) if neg_scaled else 0.0
+                exps = [math.exp(x - max_neg) for x in neg_scaled]
                 s = sum(exps) if exps else 1.0
                 probs = [e / s for e in exps]
 
                 # build prob dict and attempt cluster-based adjustments
                 prob_dict = {p: prob for p, prob in zip(pitches, probs)}
+
+                # Penalize repeating the same pitch (encourage variety)
+                last_pitch = None
+                if st.session_state.get("history"):
+                    last_pitch = st.session_state["history"][-1].get("pitch")
+
+                if last_pitch and last_pitch in prob_dict:
+                    # Reduce probability of last pitch by 30% and redistribute
+                    penalty = 0.30
+                    prob_dict[last_pitch] *= (1 - penalty)
+                    # Renormalize
+                    total = sum(prob_dict.values())
+                    if total > 0:
+                        prob_dict = {p: v / total for p, v in prob_dict.items()}
+
                 # try to resolve cluster id for this batter from arche_df
                 cluster_id = None
                 try:
