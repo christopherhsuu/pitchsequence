@@ -927,14 +927,13 @@ if st.session_state.get("atbat_active"):
         # use explicit keys so values persist in session state across reruns
         st.selectbox("Select pitch", options=pitch_options, key='selected_pitch')
         st.selectbox("Outcome", ["Ball", "Called Strike", "Swinging Strike", "Foul", "In play - out", "In play - single", "In play - double", "In play - triple", "In play - home run", "Other (end)"], key='selected_outcome')
-        st.checkbox("At-bat continues after this pitch", value=True, key='selected_continue_ab')
         submit_pitch = st.form_submit_button("Submit pitch")
 
     if submit_pitch:
         # read values from session_state
         selected_pitch = st.session_state.get('selected_pitch')
         outcome = st.session_state.get('selected_outcome')
-        continue_ab = st.session_state.get('selected_continue_ab', True)
+        continue_ab = True  # Will be set to False for walk, strikeout, or in-play outcomes
 
         # append to history
         rec = {"pitch": selected_pitch, "outcome": outcome, "count_before": count_input}
