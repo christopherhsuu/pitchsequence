@@ -70,11 +70,12 @@ def render_count_display(count_str):
     return count_svg
 
 def render_pitch_history(history):
-    """Render a timeline of pitch history."""
+    """Render a timeline of pitch history using Streamlit components."""
     if not history:
-        return "<p style='color: #6b7280; font-style: italic;'>No pitches thrown yet</p>"
+        st.markdown("<p style='color: #6b7280; font-style: italic;'>No pitches thrown yet</p>", unsafe_allow_html=True)
+        return
 
-    history_html = "<div style='display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0;'>"
+    cols = st.columns(min(len(history), 6))
     for i, h in enumerate(history):
         pitch = h.get('pitch', '?')
         outcome = h.get('outcome', '?')
@@ -98,16 +99,15 @@ def render_pitch_history(history):
             outcome_color = "#6b7280"
             outcome_icon = "?"
 
-        history_html += f'''
-        <div style='border: 2px solid {color}; border-radius: 8px; padding: 8px 12px; background: #f9fafb; min-width: 100px;'>
-            <div style='font-weight: bold; color: {color}; font-size: 14px;'>{pitch}</div>
-            <div style='font-size: 11px; color: #6b7280;'>Count: {count_before}</div>
-            <div style='background: {outcome_color}; color: white; border-radius: 4px; padding: 2px 6px; font-size: 10px; margin-top: 4px; text-align: center;'>{outcome_icon}: {outcome}</div>
-        </div>
-        '''
-
-    history_html += "</div>"
-    return history_html
+        with cols[i % 6]:
+            card_html = f'''
+            <div style='border: 2px solid {color}; border-radius: 8px; padding: 8px 12px; background: #f9fafb; min-width: 100px; margin-bottom: 8px;'>
+                <div style='font-weight: bold; color: {color}; font-size: 14px;'>{pitch}</div>
+                <div style='font-size: 11px; color: #6b7280;'>Count: {count_before}</div>
+                <div style='background: {outcome_color}; color: white; border-radius: 4px; padding: 2px 6px; font-size: 10px; margin-top: 4px; text-align: center;'>{outcome_icon}: {outcome}</div>
+            </div>
+            '''
+            st.markdown(card_html, unsafe_allow_html=True)
 
 st.set_page_config(page_title="PitchSequence", layout="centered")
 st.title("PitchSequence \u2014 Pitch Sequence Recommender")
@@ -661,7 +661,7 @@ if st.session_state.get("atbat_active"):
     st.markdown("---")
     st.markdown("#### At-Bat History")
     history = st.session_state.get("history", [])
-    st.markdown(render_pitch_history(history), unsafe_allow_html=True)
+    render_pitch_history(history)
 
     # Show next-pitch candidates with percentages
     st.subheader("Next-pitch candidates")
