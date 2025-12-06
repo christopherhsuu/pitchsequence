@@ -11,11 +11,83 @@ if str(SRC_PATH) not in sys.path:
 
 IMPORT_ERROR = None
 try:
-    from attack_recommender import load_data, recommend_sequence, get_archetype, get_next_pitch_candidates, map_pitch_to_location, load_batter_pitchtype_stats, get_batter_pitchtype_stats
-    from predict import recommend_next_pitch, MODEL_PATH, adjust_pitch_recommendation, get_cluster_features
+    # Import new recommender system
+    from predict import PitchRecommender, recommend_next_pitch
+
+    # Try to import old modules for backwards compatibility (optional)
+    try:
+        from attack_recommender import load_data, recommend_sequence, get_archetype, get_next_pitch_candidates, map_pitch_to_location, load_batter_pitchtype_stats, get_batter_pitchtype_stats
+    except ImportError:
+        # Old modules not available - define fallbacks
+        def load_data(archetypes_path, arsenals_path):
+            a = pd.DataFrame(columns=['batter','cluster','label']) if not Path(archetypes_path).exists() else pd.read_csv(archetypes_path)
+            ars = pd.DataFrame(columns=['pitcher','pitch_type']) if not Path(arsenals_path).exists() else pd.read_csv(arsenals_path)
+            return a, ars
+
+        def get_archetype(arche_df, batter_id):
+            return "unknown"
+
+        def get_pitcher_arsenal(ars_df, pitcher_id):
+            """Helper to get pitcher arsenal from new CSV format."""
+            if not isinstance(ars_df, pd.DataFrame):
+                return []
+            try:
+                pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(pitcher_id)]
+                if pitcher_row.empty:
+                    return []
+                # New format has 'pitch_types' column with comma-separated values
+                if 'pitch_types' in pitcher_row.columns:
+                    pitch_types_str = pitcher_row.iloc[0]["pitch_types"]
+                    if pd.notna(pitch_types_str):
+                        return [pt.strip() for pt in str(pitch_types_str).split(',')]
+                # Fallback: old format with individual 'pitch_type' rows
+                elif 'pitch_type' in ars_df.columns:
+                    return pitcher_row["pitch_type"].astype(str).unique().tolist()
+            except Exception:
+                pass
+            return []
+
+        def get_next_pitch_candidates(arche_df, ars_df, batter, pitcher, count, situation, top_n=None):
+            p_list = get_pitcher_arsenal(ars_df, pitcher)
+            if not p_list:
+                p_list = ["FF","SL","CU"]
+            pct = round(100.0/len(p_list),1) if p_list else 0
+            return [{"pitch": p, "pct": pct, "location": "middle"} for p in p_list]
+
+        def map_pitch_to_location(pitch_type, archetype, situation):
+            m = {"FF":"up-in","SL":"low-away","CU":"low-middle"}
+            return m.get(str(pitch_type).upper(), "middle")
+
+        def load_batter_pitchtype_stats(path="data/processed/features.parquet"):
+            return None
+
+        def get_batter_pitchtype_stats(stats_df, batter_id, pitch_type, p_throws="R"):
+            return 0.0, 0.0, 0.0
+
+    # Define missing functions if not imported from old modules
+    if 'get_cluster_features' not in dir():
+        def get_cluster_features(cluster_id):
+            return {}
+
+    if 'adjust_pitch_recommendation' not in dir():
+        def adjust_pitch_recommendation(prob_dict, cluster_feats):
+            return prob_dict
+
 except Exception as e:
     # Don't raise here — show a helpful message in the UI so deployment isn't a blank page.
     IMPORT_ERROR = e
+
+# Model and data paths
+MODEL_PATH = Path("artifacts/pitch_model.pkl")
+ARTIFACTS_PATH = Path("artifacts")
+
+# Initialize PitchRecommender
+try:
+    pitch_recommender = PitchRecommender()
+    print("PitchRecommender initialized successfully")
+except Exception as e:
+    print(f"Warning: Could not initialize PitchRecommender: {e}")
+    pitch_recommender = None
 
 # Pitch type color mapping for visual consistency
 PITCH_COLORS = {
@@ -274,14 +346,29 @@ if IMPORT_ERROR is not None:
     def get_archetype(arche_df, batter_id):
         return "unknown"
 
+    def get_pitcher_arsenal(ars_df, pitcher_id):
+        """Helper to get pitcher arsenal from new CSV format."""
+        if not isinstance(ars_df, pd.DataFrame):
+            return []
+        try:
+            pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(pitcher_id)]
+            if pitcher_row.empty:
+                return []
+            # New format has 'pitch_types' column with comma-separated values
+            if 'pitch_types' in pitcher_row.columns:
+                pitch_types_str = pitcher_row.iloc[0]["pitch_types"]
+                if pd.notna(pitch_types_str):
+                    return [pt.strip() for pt in str(pitch_types_str).split(',')]
+            # Fallback: old format with individual 'pitch_type' rows
+            elif 'pitch_type' in ars_df.columns:
+                return pitcher_row["pitch_type"].astype(str).unique().tolist()
+        except Exception:
+            pass
+        return []
+
     def get_next_pitch_candidates(arche_df, ars_df, batter, pitcher, count, situation, top_n=None):
         # simple fallback candidate list
-        p_list = []
-        if isinstance(ars_df, pd.DataFrame) and 'pitch_type' in ars_df.columns:
-            try:
-                p_list = ars_df[ars_df['pitcher'].astype(str) == str(pitcher)]['pitch_type'].astype(str).unique().tolist()
-            except Exception:
-                p_list = []
+        p_list = get_pitcher_arsenal(ars_df, pitcher)
         if not p_list:
             p_list = ["FF","SL","CU"]
         pct = round(100.0/len(p_list),1) if p_list else 0
@@ -297,15 +384,11 @@ if IMPORT_ERROR is not None:
     def get_batter_pitchtype_stats(stats_df, batter_id, pitch_type, p_throws="R"):
         return 0.0, 0.0, 0.0
 
-    # fallback predict module API
-    def recommend_next_pitch(state: dict, pitcher_id: int, batter_stats_map: dict = None):
-        # return default best pitch and zeroed predictions
-        p_list = ["FF","SL","CU"]
-        preds = {p: 0.0 for p in p_list}
-        return p_list[0], 0.0, preds
+    def get_cluster_features(cluster_id):
+        return {}
 
-    from pathlib import Path as _Path
-    MODEL_PATH = _Path("artifacts/runvalue_model.pkl")
+    def adjust_pitch_recommendation(prob_dict, cluster_feats):
+        return prob_dict
 
 
 # Safe experimental rerun helper: prevents AttributeError when deployed
@@ -318,13 +401,31 @@ def _safe_rerun():
     except Exception:
         return
 
-# Load data
+# Load data - use new profile-based system
+# Try to load old archetype data if available, otherwise use empty DataFrames
 ARCH_PATH = Path("data/player_archetypes.csv")
-ARS_PATH = Path("pitcher_assets/pitcher_arsenals.csv")
-arche_df, ars_df = load_data(ARCH_PATH, ARS_PATH)
+ARS_PATH = Path("data/processed/pitcher_arsenals.csv")  # Updated path for new system
+
+try:
+    if 'load_data' in dir():
+        arche_df, ars_df = load_data(ARCH_PATH, ARS_PATH)
+    else:
+        # Fallback: load directly
+        arche_df = pd.read_csv(ARCH_PATH) if ARCH_PATH.exists() else pd.DataFrame(columns=['batter','cluster','label'])
+        ars_df = pd.read_csv(ARS_PATH) if ARS_PATH.exists() else pd.DataFrame(columns=['pitcher','pitch_type'])
+except Exception:
+    # Use empty DataFrames if files don't exist
+    arche_df = pd.DataFrame(columns=['batter','cluster','label'])
+    ars_df = pd.read_csv(ARS_PATH) if ARS_PATH.exists() else pd.DataFrame(columns=['pitcher','pitch_type'])
 
 # load batter vs pitch_type matchup stats (if processed features exist)
-_batter_pitch_stats_df = load_batter_pitchtype_stats()
+try:
+    if 'load_batter_pitchtype_stats' in dir():
+        _batter_pitch_stats_df = load_batter_pitchtype_stats()
+    else:
+        _batter_pitch_stats_df = None
+except Exception:
+    _batter_pitch_stats_df = None
 
 
 def _load_run_expectancy():
@@ -423,6 +524,34 @@ def _prob_to_visuals(pct: float):
     green = int(max(80, 200 - (p / 100.0) * 160))
     color = f"#e53e3e" if p < 1 else f"rgb(229,{green},62)"
     return r, color
+
+
+def _plate_xy_to_svg_coords(plate_x: float, plate_z: float):
+    """Convert plate coordinates to SVG coords (0-100 viewBox).
+
+    Args:
+        plate_x: Horizontal position (-1.5 to +1.5 feet, 0 = middle)
+        plate_z: Vertical position (1.5 to 3.5 feet, height from ground)
+
+    Returns:
+        (cx, cy) in 0-100 SVG viewBox coordinates
+    """
+    # Strike zone boundaries in the SVG (viewBox 0-100):
+    # x: 15-85 (70 units wide)
+    # y: 8-92 (84 units tall)
+
+    # Map plate_x (-1.5 to +1.5) to SVG x (85 to 15) - reversed because negative is inside (right in catcher's view)
+    # Note: Reverse the mapping so negative plate_x (inside to RHH) appears on the right (higher SVG x)
+    cx = 50 - (plate_x / 1.5) * 35  # Center at 50, range 15-85
+
+    # Map plate_z (1.5 to 3.5) to SVG y (92 to 8) - reversed because higher plate_z = lower SVG y
+    cz = 92 - ((plate_z - 1.5) / 2.0) * 84  # Bottom at 92, top at 8
+
+    # Clamp to viewBox bounds
+    cx = max(15, min(85, cx))
+    cz = max(8, min(92, cz))
+
+    return cx, cz
 
 
 def _svg_coords_to_plate_xy(cx: float, cy: float):
@@ -601,9 +730,10 @@ if submit:
     st.session_state["batter_id"] = str(batter_id)
     st.session_state["pitcher_id"] = str(pitcher_id)
     st.session_state["count"] = count_input
-    # set base occupancy and outs in situation
-    sit = {"on_1b": bool(on_1b), "on_2b": bool(on_2b), "on_3b": bool(on_3b), "outs": int(outs)}
-    st.session_state["situation"] = sit
+    # set base occupancy and outs in situation ONLY if not already set (don't overwrite during at-bat)
+    if "situation" not in st.session_state or len(st.session_state.get("history", [])) == 0:
+        sit = {"on_1b": bool(on_1b), "on_2b": bool(on_2b), "on_3b": bool(on_3b), "outs": int(outs)}
+        st.session_state["situation"] = sit
 
 
 # Running at-bat UI: show whenever session indicates an active at-bat
@@ -618,9 +748,8 @@ if st.session_state.get("atbat_active"):
 
     # Matchup header
     archetype = get_archetype(arche_df, batter_id)
-    pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(pitcher_id)]
-    if not pitcher_row.empty:
-        arsenal_list = pitcher_row["pitch_type"].astype(str).unique().tolist()
+    arsenal_list = get_pitcher_arsenal(ars_df, pitcher_id)
+    if arsenal_list:
         arsenal_display = ', '.join(arsenal_list)
     else:
         arsenal_display = "unknown"
@@ -634,34 +763,62 @@ if st.session_state.get("atbat_active"):
 
     st.markdown("---")
 
-    # Game state display: Count, Diamond, and Run Expectancy
-    col_state1, col_state2, col_state3 = st.columns([1, 1, 1])
+    # Calculate count-specific run expectancy (will be used in compact display)
+    try:
+        balls_count, strikes_count = 0, 0
+        if '-' in count_input:
+            parts = count_input.split('-')
+            balls_count = int(parts[0])
+            strikes_count = int(parts[1])
+    except:
+        balls_count, strikes_count = 0, 0
 
-    with col_state1:
-        st.markdown("#### Count")
-        st.markdown(render_count_display(count_input), unsafe_allow_html=True)
+    outs = int(situation.get("outs", 0))
+    bases_state = f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}"
+    sit_rep = (outs, bases_state)
+    base_re = _RE_MAP.get(sit_rep, 0.0)
 
-    with col_state2:
-        st.markdown("#### Bases & Outs")
-        st.markdown(render_baseball_diamond(
-            situation.get('on_1b', False),
-            situation.get('on_2b', False),
-            situation.get('on_3b', False),
-            situation.get('outs', 0)
-        ), unsafe_allow_html=True)
+    # Adjust RE based on count favorability
+    count_adjustment = 0.0
+    if strikes_count > balls_count:
+        count_adjustment = -0.10 * base_re * (strikes_count - balls_count) / 2
+    elif balls_count > strikes_count:
+        count_adjustment = 0.10 * base_re * (balls_count - strikes_count) / 3
 
-    with col_state3:
-        st.markdown("#### Run Expectancy")
-        sit_rep = (int(situation.get("outs", 0)),
-                   f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}")
-        current_re = _RE_MAP.get(sit_rep, 0.0)
-        st.markdown(f"<div style='text-align: center; padding: 20px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; margin-top: 10px;'><div style='font-size: 36px; font-weight: bold; color: #166534;'>{current_re:.2f}</div><div style='font-size: 14px; color: #6b7280;'>Expected Runs</div></div>", unsafe_allow_html=True)
+    if balls_count == 3 and strikes_count < 2:
+        count_adjustment = 0.15 * base_re
+    elif strikes_count == 2 and balls_count < 2:
+        count_adjustment = -0.15 * base_re
+    elif balls_count == 3 and strikes_count == 2:
+        count_adjustment = 0.0
 
-    # Pitch history
+    current_re = base_re + count_adjustment
+
+    # Compact game state display in a single row
+    state_col1, state_col2, state_col3, state_col4 = st.columns([1, 1, 1, 1])
+
+    with state_col1:
+        st.markdown(f"<div style='text-align: center; padding: 10px; background: #eff6ff; border-radius: 8px;'><div style='font-size: 12px; color: #6b7280; margin-bottom: 4px;'>COUNT</div><div style='font-size: 24px; font-weight: bold; color: #1e40af;'>{count_input}</div></div>", unsafe_allow_html=True)
+
+    with state_col2:
+        # Compact bases display
+        on_1 = "●" if situation.get('on_1b', False) else "○"
+        on_2 = "●" if situation.get('on_2b', False) else "○"
+        on_3 = "●" if situation.get('on_3b', False) else "○"
+        st.markdown(f"<div style='text-align: center; padding: 10px; background: #f0fdf4; border-radius: 8px;'><div style='font-size: 12px; color: #6b7280; margin-bottom: 4px;'>BASES</div><div style='font-size: 20px;'>{on_3}<br>{on_2} {on_1}</div></div>", unsafe_allow_html=True)
+
+    with state_col3:
+        st.markdown(f"<div style='text-align: center; padding: 10px; background: #fef3c7; border-radius: 8px;'><div style='font-size: 12px; color: #6b7280; margin-bottom: 4px;'>OUTS</div><div style='font-size: 24px; font-weight: bold; color: #92400e;'>{outs}</div></div>", unsafe_allow_html=True)
+
+    with state_col4:
+        st.markdown(f"<div style='text-align: center; padding: 10px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;'><div style='font-size: 12px; color: #6b7280; margin-bottom: 4px;'>RUN EXP</div><div style='font-size: 24px; font-weight: bold; color: #166534;'>{current_re:.2f}</div></div>", unsafe_allow_html=True)
+
     st.markdown("---")
-    st.markdown("#### At-Bat History")
-    history = st.session_state.get("history", [])
-    render_pitch_history(history)
+
+    # At-bat history in collapsible section
+    with st.expander("At-Bat History", expanded=False):
+        history = st.session_state.get("history", [])
+        render_pitch_history(history)
 
     # Show next-pitch candidates with percentages
     st.subheader("Next-pitch candidates")
@@ -712,96 +869,75 @@ if st.session_state.get("atbat_active"):
                 "last_pitch_result": None
             }
 
-            # model returns (best_pitch, best_val, preds_dict)
+            # Use PitchRecommender for intelligent recommendations
             try:
-                # build batter stats map for this batter (pitch -> (woba, whiff, run_value))
                 batter_id_val = st.session_state.get('batter_id')
-                batter_stats_map = {}
-                # get the pitcher's arsenal and construct stats for each pitch (fallback zeros when missing)
-                try:
-                    pitcher_ars = ars_df[ars_df["pitcher"].astype(str) == str(pid)]["pitch_type"].astype(str).unique().tolist()
-                except Exception:
-                    pitcher_ars = []
-                if not pitcher_ars:
-                    # fallback to some common pitch types
-                    pitcher_ars = ["FF", "SL", "CU"]
 
-                for pt in pitcher_ars:
-                    w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)
-                    batter_stats_map[pt] = (w, wh, rv)
-
-                best_pt, best_val, preds, _ = recommend_next_pitch(model_state, pid, batter_stats_map=batter_stats_map)
-                # expose debug info for verification
-                with st.expander("Debug: model internals", expanded=False):
-                    st.write({"model_used": True, "pitcher_id": pid, "batter_id": batter_id_val})
-                    st.write("batter_stats_map sample:", {k: batter_stats_map[k] for k in list(batter_stats_map)[:10]})
-                    st.write("raw_preds:", preds)
-                # preds: mapping pitch -> expected_run_value (lower is better).
-                # Convert to probabilities using run expectancy: compute current RE and expected_after_RE = current_RE + rv
-                # then p ~ softmax(-expected_after_RE)
-                import math
-                pitches = list(preds.keys())
-                vals = [preds[p] for p in pitches]
-                # determine current run expectancy from situation
-                sit_rep = (int(situation.get("outs", 0)), f"{1 if situation.get('on_1b') else 0}{1 if situation.get('on_2b') else 0}{1 if situation.get('on_3b') else 0}")
-                current_re = _RE_MAP.get(sit_rep, 0.0)
-                after_re = [current_re + v for v in vals]
-                neg = [-v for v in after_re]
-
-                # Apply temperature to soften probabilities (higher temp = more uniform distribution)
-                # Using temp=5.0 to prevent one pitch from completely dominating
-                temperature = 5.0
-                neg_scaled = [x / temperature for x in neg]
-                max_neg = max(neg_scaled) if neg_scaled else 0.0
-                exps = [math.exp(x - max_neg) for x in neg_scaled]
-                s = sum(exps) if exps else 1.0
-                probs = [e / s for e in exps]
-
-                # build prob dict and attempt cluster-based adjustments
-                prob_dict = {p: prob for p, prob in zip(pitches, probs)}
-
-                # Penalize repeating the same pitch (encourage variety)
-                last_pitch = None
+                # Get last pitch type from history if available
+                last_pitch_type = None
                 if st.session_state.get("history"):
-                    last_pitch = st.session_state["history"][-1].get("pitch")
+                    last_pitch_type = st.session_state["history"][-1].get("pitch")
 
-                if last_pitch and last_pitch in prob_dict:
-                    # Reduce probability of last pitch by 30% and redistribute
-                    penalty = 0.30
-                    prob_dict[last_pitch] *= (1 - penalty)
-                    # Renormalize
-                    total = sum(prob_dict.values())
-                    if total > 0:
-                        prob_dict = {p: v / total for p, v in prob_dict.items()}
+                # Call the recommender
+                if pitch_recommender is not None:
+                    results = pitch_recommender.recommend(
+                        pitcher_id=pid,
+                        batter_id=batter_id_val,
+                        balls=balls_val,
+                        strikes=strikes_val,
+                        outs=outs_val,
+                        on_1b=bool(on_1b_val),
+                        on_2b=bool(on_2b_val),
+                        on_3b=bool(on_3b_val),
+                        stand="R",  # TODO: Get from batter profile
+                        last_pitch_type=last_pitch_type,
+                        top_n=None  # Get all pitches in arsenal
+                    )
 
-                # try to resolve cluster id for this batter from arche_df
-                cluster_id = None
-                try:
-                    if 'cluster' in arche_df.columns:
-                        r = arche_df[arche_df["batter"].astype(str) == str(batter_id)]
-                        if not r.empty:
-                            cluster_id = r.iloc[0].get('cluster')
-                except Exception:
-                    cluster_id = None
+                    # Store debug info for later display
+                    debug_info = {
+                        "model_used": True,
+                        "pitcher_id": pid,
+                        "batter_id": batter_id_val,
+                        "num_recommendations": len(results)
+                    }
 
-                cluster_feats = None
-                try:
-                    if cluster_id is not None:
-                        cluster_feats = get_cluster_features(cluster_id)
-                except Exception:
-                    cluster_feats = None
+                    # Convert results to candidates format for UI
+                    for r in results:
+                        pitch_type = r['pitch_type']
+                        loc_data = r['location']
 
-                adjusted = adjust_pitch_recommendation(prob_dict, cluster_feats)
+                        # Convert plate_x, plate_z to human-readable location string
+                        px = loc_data.get('plate_x', 0.0)
+                        pz = loc_data.get('plate_z', 2.5)
 
-                for p, prob, rv in zip(pitches, probs, vals):
-                    loc = map_pitch_to_location(p, get_archetype(arche_df, batter_id), situation)
-                    candidates.append({
-                        "pitch": p,
-                        "pct": round(adjusted.get(p, prob) * 100, 1),
-                        "location": loc,
-                        "expected_run_value": round(rv, 4),
-                        "expected_after_re": round(current_re + rv, 4)
-                    })
+                        # Map to human-readable location
+                        if px < -0.5:
+                            horizontal = "inside"
+                        elif px > 0.5:
+                            horizontal = "outside"
+                        else:
+                            horizontal = "middle"
+
+                        if pz < 2.3:
+                            vertical = "low"
+                        elif pz > 3.2:
+                            vertical = "high"
+                        else:
+                            vertical = "mid"
+
+                        loc_string = f"{horizontal}-{vertical}"
+
+                        candidates.append({
+                            "pitch": pitch_type,
+                            "pct": round(r['probability_pct'], 1),
+                            "location": loc_string,
+                            "location_data": loc_data,  # Store raw location data for visualization
+                            "expected_run_value": r['predicted_rv'],
+                            "expected_after_re": r['expected_re_after']
+                        })
+                else:
+                    raise Exception("PitchRecommender not available")
             except Exception as me:
                 # model failed; fallback to heuristic
                 candidates = get_next_pitch_candidates(arche_df, ars_df, batter_id, pitcher_id, count_input, situation)
@@ -821,113 +957,121 @@ if st.session_state.get("atbat_active"):
             c['expected_after_re'] = round(current_re, 2)
 
     # Determine full pitcher arsenal (all pitch types this pitcher throws)
-    pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(pitcher_id)]
-    if not pitcher_row.empty:
-        arsenal_list = pitcher_row["pitch_type"].astype(str).unique().tolist()
-    else:
+    arsenal_list = get_pitcher_arsenal(ars_df, pitcher_id)
+
+    if not arsenal_list:
         # try to resolve pitcher id from mapping file if available
-        # and re-check arsenals
-        # mapping loaded earlier: pitcher_name_to_id
         resolved_pid = pitcher_id
         try:
             # if pitcher_name exists in mapping, use its id
             mapped = pitcher_name_to_id.get(pitcher_name)
             if mapped:
                 resolved_pid = mapped
-                pitcher_row = ars_df[ars_df["pitcher"].astype(str) == str(resolved_pid)]
+                arsenal_list = get_pitcher_arsenal(ars_df, resolved_pid)
         except Exception:
             pass
 
         # if still empty, try substring match against arsenals values (maybe pitcher id recorded as different form)
-        if pitcher_row.empty:
+        if not arsenal_list:
             def row_contains_name(r):
                 return any(str(v).lower().find(str(pitcher_name).lower()) != -1 for v in r.values)
-            matches = ars_df[ars_df.apply(row_contains_name, axis=1)]
-            if not matches.empty:
-                arsenal_list = matches["pitch_type"].astype(str).unique().tolist()
+            try:
+                matches = ars_df[ars_df.apply(row_contains_name, axis=1)]
+                if not matches.empty:
+                    # Get first match's arsenal
+                    arsenal_list = get_pitcher_arsenal(ars_df, matches.iloc[0]["pitcher"])
+            except Exception:
+                pass
+
+        # still empty: fallback to common pitches
+        if not arsenal_list:
+            arsenal_list = ["FF", "SL", "CU"]
+
+    # Two-column layout: recommendations on left, pitch submission on right
+    rec_col, form_col = st.columns([2, 1])
+
+    with rec_col:
+        st.markdown("#### Pitch Recommendations")
+        if not candidates:
+            st.info("No candidates available")
         else:
-            arsenal_list = pitcher_row["pitch_type"].astype(str).unique().tolist()
+            # determine top recommended pitch (highest pct)
+            try:
+                top_pitch = max(candidates, key=lambda x: x.get('pct', 0))
+                top_name = top_pitch.get('pitch')
+            except Exception:
+                top_pitch = None
+                top_name = None
 
-        # still empty: fallback to the most common arsenal items across dataset
-        if not ( 'arsenal_list' in locals() and arsenal_list ):
-            common = ars_df["pitch_type"].value_counts().index.tolist()
-            # take top 3 most common pitch types league-wide
-            arsenal_list = common[:3] if common else ["FF", "SL", "CU"]
+            # Show all recommendations in compact format
+            for c in candidates:
+                is_top = (c.get('pitch') == top_name)
+                pitch_type = c.get('pitch')
+                pitch_color = get_pitch_color(pitch_type)
+                pct = c.get('pct', 0)
+                expected_re = c.get('expected_after_re', 0)
 
-    # display candidates as paired rows: text info on left, strike-zone visual on right
-    st.markdown("**Next-pitch candidates (click Submit to record a pitch)**")
-    if not candidates:
-        st.info("No candidates available")
-    else:
-        # determine top recommended pitch (highest pct)
-        try:
-            top_pitch = max(candidates, key=lambda x: x.get('pct', 0))
-            top_name = top_pitch.get('pitch')
-        except Exception:
-            top_pitch = None
-            top_name = None
+                # Compact card styling
+                border_style = f"border-left: 4px solid {pitch_color}; background: #f9fafb;" if is_top else f"border-left: 2px solid #e5e7eb; background: #ffffff;"
 
-        for c in candidates:
-            is_top = (c.get('pitch') == top_name)
-            pitch_type = c.get('pitch')
-            pitch_color = get_pitch_color(pitch_type)
-            pct = c.get('pct', 0)
-            expected_re = c.get('expected_after_re', 0)
+                # Get location data for strike zone
+                loc_data = c.get('location_data', {})
+                if loc_data and 'plate_x' in loc_data and 'plate_z' in loc_data:
+                    cx, cy = _plate_xy_to_svg_coords(loc_data['plate_x'], loc_data['plate_z'])
+                else:
+                    loc = c.get('location', '')
+                    cx, cy = _loc_to_svg_coords(loc)
 
-            # row container with better styling
-            border_style = f"border: 3px solid {pitch_color}; background: #f9fafb;" if is_top else f"border: 2px solid #e5e7eb; background: #ffffff;"
+                r = max(3, min(8, pct / 6))
+                loc_string = c.get('location', '')
 
-            card_html = f'''
-            <div style='{border_style} border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <div style='flex: 1;'>
-                        <div style='font-size: 24px; font-weight: bold; color: {pitch_color}; margin-bottom: 4px;'>
-                            {pitch_type} {"[TOP CHOICE]" if is_top else ""}
+                if loc_data and 'plate_x' in loc_data:
+                    tooltip = f"{pitch_type} {pct}% — Location: ({loc_data['plate_x']:.2f}, {loc_data['plate_z']:.2f}) — Expected RV: {loc_data.get('expected_rv', 0):.3f}"
+                else:
+                    tooltip = f"{pitch_type} {pct}% — Location: {loc_string} — Expected after RE: {expected_re}"
+
+                strike_zone_svg = f'<svg width="100" height="120" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><title>{tooltip}</title><rect x="15" y="8" width="70" height="84" fill="#f0f9ff" stroke="#1e40af" stroke-width="2" rx="4" /><line x1="15" y1="36" x2="85" y2="36" stroke="#cbd5e1" stroke-width="0.5"/><line x1="15" y1="64" x2="85" y2="64" stroke="#cbd5e1" stroke-width="0.5"/><line x1="38" y1="8" x2="38" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><line x1="62" y1="8" x2="62" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><circle cx="{cx}" cy="{cy}" r="{r}" fill="{pitch_color}" opacity="0.85" stroke="#fff" stroke-width="2"/></svg>'
+
+                card_html = f'''
+                <div style='{border_style} border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <div style='flex: 1;'>
+                            <div style='font-size: 20px; font-weight: bold; color: {pitch_color};'>
+                                {pitch_type} {"★" if is_top else ""}
+                            </div>
+                            <div style='font-size: 16px; color: #374151;'>
+                                <strong>{pct}%</strong> · RE: {expected_re:.2f}
+                            </div>
+                            <div style='font-size: 11px; color: #9ca3af;'>
+                                {loc_string}
+                            </div>
                         </div>
-                        <div style='font-size: 18px; color: #374151; margin-bottom: 8px;'>
-                            <strong>{pct}%</strong> recommendation
-                        </div>
-                        <div style='font-size: 14px; color: #6b7280;'>
-                            Expected RE after: <strong>{expected_re}</strong>
-                        </div>
-                        <div style='font-size: 12px; color: #9ca3af; margin-top: 4px;'>
-                            Location: {c.get('location', 'N/A')}
+                        <div style='flex: 0 0 auto;'>
+                            {strike_zone_svg}
                         </div>
                     </div>
-                    <div style='flex: 0 0 auto;'>
-            '''
+                </div>
+                '''
+                st.markdown(card_html, unsafe_allow_html=True)
 
-            # Add strike zone visual
-            loc = c.get('location', '')
-            cx, cy = _loc_to_svg_coords(loc)
-            # Size circle based on probability
-            r = max(4, min(12, pct / 5))
+    with form_col:
+        st.markdown("#### Submit Pitch")
 
-            strike_zone_svg = f'<svg width="140" height="160" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><title>{pitch_type} {pct}% — expected after RE: {expected_re}</title><rect x="15" y="8" width="70" height="84" fill="#f0f9ff" stroke="#1e40af" stroke-width="2" rx="4" /><line x1="15" y1="36" x2="85" y2="36" stroke="#cbd5e1" stroke-width="0.5"/><line x1="15" y1="64" x2="85" y2="64" stroke="#cbd5e1" stroke-width="0.5"/><line x1="38" y1="8" x2="38" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><line x1="62" y1="8" x2="62" y2="92" stroke="#cbd5e1" stroke-width="0.5"/><circle cx="{cx}" cy="{cy}" r="{r}" fill="{pitch_color}" opacity="0.85" stroke="#fff" stroke-width="2"/><text x="50" y="5" font-size="5" text-anchor="middle" fill="#64748b">{loc}</text></svg>'
+        # If we have model-based candidate probabilities, reorder arsenal_list to put top candidates first
+        if candidates and any('pct' in c for c in candidates):
+            score_map = {c['pitch']: c.get('pct', 0) for c in candidates}
+            arsenal_list = sorted(arsenal_list, key=lambda p: -score_map.get(p, 0))
 
-            card_html += f'{strike_zone_svg}</div></div></div>'
+        with st.form(key='select_next'):
+            pitch_options = arsenal_list
+            st.selectbox("Pitch Type", options=pitch_options, key='selected_pitch')
+            st.selectbox("Outcome", ["Ball", "Called Strike", "Swinging Strike", "Foul", "In play - out", "In play - single", "In play - double", "In play - triple", "In play - home run", "Other (end)"], key='selected_outcome')
+            submit_pitch = st.form_submit_button("Submit Pitch", use_container_width=True)
 
-            st.markdown(card_html, unsafe_allow_html=True)
-
-                    # (visual target feature removed for clarity)
-
-    st.write("")
-    st.markdown("Select which pitch will be thrown next and enter the pitch outcome.")
-
-    # If we have model-based candidate probabilities, reorder arsenal_list to put top candidates first
-    if candidates and any('pct' in c for c in candidates):
-        # build a mapping pitch -> pct
-        score_map = {c['pitch']: c.get('pct', 0) for c in candidates}
-        # sort arsenal_list by pct desc, fallback to original order
-        arsenal_list = sorted(arsenal_list, key=lambda p: -score_map.get(p, 0))
-
-    with st.form(key='select_next'):
-        # show full pitcher arsenal as the selectable options
-        pitch_options = arsenal_list
-        # use explicit keys so values persist in session state across reruns
-        st.selectbox("Select pitch", options=pitch_options, key='selected_pitch')
-        st.selectbox("Outcome", ["Ball", "Called Strike", "Swinging Strike", "Foul", "In play - out", "In play - single", "In play - double", "In play - triple", "In play - home run", "Other (end)"], key='selected_outcome')
-        submit_pitch = st.form_submit_button("Submit pitch")
+    # Show debug info at bottom if available
+    if 'debug_info' in locals():
+        with st.expander("🔧 Debug: Model Internals", expanded=False):
+            st.write(debug_info)
 
     if submit_pitch:
         # read values from session_state
@@ -1068,9 +1212,8 @@ if st.session_state.get("atbat_active"):
                 # build batter stats map for display
                 batter_id_val = st.session_state.get('batter_id')
                 batter_stats_map = {}
-                try:
-                    pitcher_ars = ars_df[ars_df["pitcher"].astype(str) == str(pid)]["pitch_type"].astype(str).unique().tolist()
-                except Exception:
+                pitcher_ars = get_pitcher_arsenal(ars_df, pid)
+                if not pitcher_ars:
                     pitcher_ars = ["FF", "SL", "CU"]
                 for pt in pitcher_ars:
                     w, wh, rv = get_batter_pitchtype_stats(_batter_pitch_stats_df, batter_id_val, pt)

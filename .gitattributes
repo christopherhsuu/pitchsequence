@@ -1,3 +1,6 @@
-*.csv filter=lfs diff=lfs merge=lfs -text
-*.pkl filter=lfs diff=lfs merge=lfs -text
-*.parquet filter=lfs diff=lfs merge=lfs -text
+# Only use LFS for model artifacts (not large data files)
+artifacts/*.pkl filter=lfs diff=lfs merge=lfs -text
+static/*.csv filter=lfs diff=lfs merge=lfs -text
+
+# Exclude large data files from LFS (they're gitignored)
+data/** -filter -diff -merge
